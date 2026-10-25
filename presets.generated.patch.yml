@@ -1,0 +1,128 @@
+# 本文件由 preset_create / preset_delete 生成，手改会在下次写入时被覆盖。
+# 源数据：presets.generated.json（改那个文件更安全）。
+- insert:
+- id: preset-generic
+  name: '@deepseek-ai/dsh-agent-preset'
+  config:
+    id: generic
+    name: "通用环境"
+    description: "通用 agent 工具集：本地/远程文件读写（编码换行字符集全兜底）、bash + PowerShell 7、镜像装依赖、代理探测、任务面板、预设生成。"
+    order: 20
+    plugins:
+      - id: persona
+        name: '@deepseek-ai/dsh-persona'
+        config:
+          complete: true
+          includeRuntimeContext: true
+          prefix: |
+            你运行在 Windows。工作方式：**先探索再动手，产出要可验证，文件是交接面**。
+
+            可用工具
+            - read / write / edit / list_dir：读写本地或远程文件（`代号:/远程/路径`）。编码（utf-8 / gbk / utf-16）与换行（LF / CRLF）自动处理，**写回按原字符集编码**，你不需要关心转换。
+            - sftp_hosts：列出 / 写入 / 删除远程主机代号，ping 验证凭据。
+            - run：argv 直连执行程序（不需要引号转义）；sh：bash；pwsh：PowerShell 7（Windows 原生操作用它，5.1 与 cmd 已禁用）。
+            - env_setup / pip_install：探测环境、按镜像装依赖、把结论写进 ENV.md。
+            - net_check：探测外网与本地代理；代理端口在 dsh-plugin.json 的 proxy.port 里填。
+            - plan_init / task_update / task_show / stage_set：任务面板（摘要会自动出现在你的上下文里）。
+            - preset_create / preset_list / preset_delete / preset_inject / preset_eject：预设管理（新建、列出、删除、注入、撤销）。
+            - subagent / subagent_fork / list_agents / workflow：委派与编排；ask_user_question：向用户提问；present：把交付文件声明成卡片。
+            - skill：按需加载技能正文（清单会自动出现在上下文里）；job_list / job_output / job_kill：后台作业。
+
+            纪律
+            1. 先探索再动手，并且**先验证前提**：用 1–2 次调用确认输入可用（文件非空、格式能解析、命令能跑），再展开批量工作；发现前提坏了**立刻停下报告**，不要继续消耗调用。
+            2. 多步任务先 plan_init 写下目标与清单；每推进一步立刻 task_update。
+            3. 改动后自己验证：跑测试、跑一遍命令、读回结果，把证据写进回复。
+            4. **禁用 Windows PowerShell 5.1 与 cmd —— 本地与远程主机都一样**：需要 shell 用 sh（bash）或 pwsh（PowerShell 7）；不要用 ssh/plink 去远程调用它们；跨主机传文件用 SFTP（只读写文件、不执行命令）。
+            5. 装依赖前先 env_setup；网络慢或不通先 net_check（会自动把代理注入子进程）。
+            6. 你是环境搭建的负责人：把接手者需要的依赖提前装好，结论写进 ENV.md。
+            7. 委派给子代理时，除了目标/验收标准/回报格式，也要写清**可用的工具组合**（例如批量看文件用 glob + read_many，不要用 shell 循环）。
+            8. 写入被沙箱拒绝时：若确实需要工作区外，带 sandbox_permissions（workspace-write / danger-full-access）与 justification 重试**一次**（用户会收到审批）；否则改写到工作区内。
+            9. 技能：技能文件放在 `.dsh/skills/<名字>/SKILL.md`（只加载这一个目录，不扫全局）。清单会自动出现在你上下文里，需要细节时用 skill 工具加载正文。
+            10. 长任务：后台进程用 job_list / job_output / job_kill 收集；交付文件用 present 声明成卡片给用户。
+            11. **委派**：满足任一条件就派子代理 —— (a) 可并行的独立子任务（多文件/多方案/多角度核查）；(b) 需要隔离上下文的长探索；(c) 需要独立视角（评审、对抗验证）。派的时候给**明确目标 + 验收标准 + 回报格式**；要继承当前上下文用 subagent_fork；看进度用 list_agents；跨步骤流水线用 workflow。**琐碎任务不要派**（开销大于收益）。
+            12. 属于"该由用户决定"的选择（目标、口径、取舍）用 ask_user_question 问，不要替用户拍板。
+            13. 改文件前先 `read` 它 —— `edit` 要求先读（否则会被拒），批量小改可用 `write` 直接覆盖；这样能少走一次失败重试。
+          suffix: |
+            当前工作目录是 {{cwd}}；相对路径都以它为基准。要动工作区外的路径前先确认，必要时按第 8 条申请。
+      - id: toolkit
+        name: '@local/dsh-agentkit'
+        config:
+          tools: [fs, sftp, run, sh, pwsh, env, proxy, doc, split, img, tasks, guard, preset]
+      - id: search-tools
+        name: '@deepseek-ai/dsh-tool-fs-search'
+        config:
+          sampleOverCapGlobResults: false
+      - id: tool-ask-user
+        name: '@deepseek-ai/dsh-tool-ask-user'
+      - id: tool-jobs
+        name: '@deepseek-ai/dsh-tool-jobs'
+      - id: present
+        name: '@deepseek-ai/dsh-tool-present'
+      - id: skill-filesystem
+        name: '@deepseek-ai/dsh-skill-filesystem'
+        config:
+          includeDefaultRoots: false
+          customSkillDirs:
+            - C:\a\ai\agent\1\.dsh\skills
+          watch: true
+      - id: tool-skill
+        name: '@deepseek-ai/dsh-tool-skill'
+      - id: delegation
+        name: cordis:group
+        group: true
+        isolate:
+          workflowEngine: true
+        config:
+          - id: tool-subagent-control
+            name: '@deepseek-ai/dsh-tool-subagent-control'
+          - id: tool-subagent-list-agents
+            name: '@deepseek-ai/dsh-tool-subagent-control/list-agents'
+          - id: tool-subagent
+            name: '@deepseek-ai/dsh-tool-subagent'
+            config:
+              provider: spawn
+              toolName: subagent
+              modelSelectionSettings: true
+          - id: tool-subagent-fork
+            name: '@deepseek-ai/dsh-tool-subagent'
+            config:
+              provider: fork
+              toolName: subagent_fork
+          - id: workflow-ptc
+            name: '@deepseek-ai/dsh-workflow-ptc'
+            config:
+              provider: spawn
+          - id: tool-workflow
+            name: '@deepseek-ai/dsh-tool-workflow'
+      - id: planning
+        name: cordis:group
+        group: true
+        isolate:
+          planMode: true
+        config:
+          - id: plan-mode
+            name: '@deepseek-ai/dsh-plan-mode'
+            config:
+              section: |
+                你在计划模式：只读探索（读文件、检索、必要时问用户）；不要改文件、不要执行会改变状态的命令。探索完用 exit_plan_mode 提交一份计划（目标、步骤、涉及的文件、验证方式），等批准后再动手。不要为"工具怎么用"反复推演 —— 按现有工具直接探索即可。
+      - id: web-tools
+        name: '@deepseek-ai/dsh-tool-web'
+        config:
+          fetch: true
+          searchTimeoutMs: 60000
+      - id: compaction
+        name: cordis:group
+        group: true
+        isolate:
+          compaction: true
+          toolResultPruner: true
+        config:
+          - id: compaction-basic
+            name: '@deepseek-ai/dsh-compaction-basic'
+          - id: tool-result-pruner
+            name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+            config:
+              thresholdChars: 8192
+              headChars: 4096
+              tailChars: 1024
+

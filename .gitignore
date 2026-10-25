@@ -1,0 +1,21 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 缓存与临时
+.cache/
+*.log
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 运行时产物
+*.db
+*.db-wal
+*.db-shm

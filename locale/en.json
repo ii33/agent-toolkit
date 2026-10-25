@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "General agent toolkit",
+    "description": "General-purpose toolkit, unrelated to translation or any specific model: this bundle itself provides encoding/newline/charset-safe file read-write (local and SFTP host codes plus remote content search), sandbox escalation, a shell-free argv runner, bash and PowerShell 7, mirror-accelerated dependency installs, outbound proxy probing, document OCR/merge/pack, large-file chunking, image read and crop, a file-backed task panel, and preset management, plus a structural ban on Windows PowerShell 5.1; its generic preset additionally mounts DSH-shipped glob/grep search, user questions, and plan mode."
+  }
+}

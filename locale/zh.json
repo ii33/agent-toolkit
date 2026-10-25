@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "通用 agent 工具集",
+    "description": "与翻译、模型无关的通用工具集：本包提供编码/换行/字符集安全的文件读写（本地 + SFTP 远程代号与远程内容检索）、沙箱提权、argv 无 shell 运行器、bash 与 PowerShell 7、镜像加速装依赖、外网代理探测、文档 OCR/合并/打包、大文件拆块、图片读取与裁剪、文件账本任务面板、预设管理，以及结构化禁用 Windows PowerShell 5.1；其 generic 预设另外挂载 DSH 出货的 glob/grep 检索、询问用户与计划模式。"
+  }
+}
