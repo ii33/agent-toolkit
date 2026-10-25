@@ -147,3 +147,7 @@ MSYS2 / Cygwin 的 python 用 posixpath，`D:\...` 形式的绝对路径会被�
 
 所有工具注册在**选中该 preset 的会话**里；宿主行不注册工具；guard 按 agent 注册。
 其它 preset / 会话看不到本工具集，也不会改变宿主默认行为。
+
+## 许可证
+
+[MIT](LICENSE) © 2026 ii33
