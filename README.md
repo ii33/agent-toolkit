@@ -35,7 +35,7 @@ dsh plugin --profile <profile> install <路径或 tgz>
 
 | 能力 | 工具数 | 提供 |
 |---|---|---|
-| `fs` | 5 | `read` / `read_many`（一次读多个文件，支持目录+通配）/ `write` / `edit` / `list_dir`（含排序与文件详情）：编码、换行、字符集安全；本地 + `代号:/远程`；含沙箱提权 |
+| `fs` | 5 | `read` / `read_many`（一次读多个文件，支持目录+通配）/ `write` / `edit` / `list_dir`（含排序与文件详情）：编码、换行、字符集安全；本地 + `代号:/远程`；`edit` 在 CRLF/LF 混排文件里只替换命中区间、保留各行原始行尾；含沙箱提权 |
 | `sftp` | 2 | `sftp_hosts`：远程主机代号增删查 + `ping` 验证凭据（AsyncSSH 侧车，复用长连接）；`search_remote`：远程内容检索（本地检索用 `grep`） |
 | `run` | 1 | `run`：argv 直连执行，不经 shell、不需要引号转义 |
 | `sh` | 1 | `sh`：bash（MSYS2） |
@@ -111,6 +111,7 @@ node test/split.test.mjs            # 大文件拆块
 node test/image-ops.test.mjs        # 图片工具（需要 Pillow）
 node test/client-render.test.mjs    # 客户端卡片 SSR 渲染
 node test/preset-inject.test.mjs    # 预设注入/编辑（含真实出货预设）
+node test/eol-mixed.test.mjs        # 混合行尾编辑：只替换命中区间，保留各行行尾
 node test/measure-capabilities.mjs  # 各能力的 token 成本
 node test/measure.mjs <会话日志>     # 各 preset 的系统提示词 + 工具 schema 占用（需要一份会话日志路径）
 ```

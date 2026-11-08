@@ -19,11 +19,13 @@ import { canEncode, encodeText, encodeWriteFile } from '../lib/charset.js'
 import {
   detectBom,
   decodeText,
+  detectEol,
   dominantEol,
   eolLabel,
   encodingLabel,
   looksBinary,
   normalizeEol,
+  planEolPreservingEdit,
   stripBom
 } from '../lib/encoding.js'
 import { currentPolicy, formatBytes, normalizePathInput, optionalPositiveInt, resolveOptions, utf8Bytes } from '../lib/fs-common.js'
@@ -481,7 +483,7 @@ function writeTextDefinition(ctx) {
 function editTextDefinition(ctx) {
   return {
     name: 'edit',
-    description: '按字面量替换文本，匹配前先把换行统一成文件既有风格；非 UTF-8 文件按原字符集写回。支持 `代号:/远程/路径`。',
+    description: '按字面量替换文本，匹配时忽略换行风格差异；CRLF/LF 混排文件只替换命中区间、保留其它行的原始行尾；非 UTF-8 文件按原字符集写回。支持 `代号:/远程/路径`。',
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -509,7 +511,9 @@ function editTextDefinition(ctx) {
       },
       render: (_args, value) => [{
         type: 'text',
-        text: `已替换 ${value.path} 中的 ${value.replaced} 处（按 ${eolLabel(value.eol)} 规范化后匹配；${value.encoding} 写回）`
+        text: value.eol === 'mixed'
+          ? `已替换 ${value.path} 中的 ${value.replaced} 处（文件是 CRLF/LF 混排：只替换命中区间，各行原始行尾保留；${value.encoding} 写回）`
+          : `已替换 ${value.path} 中的 ${value.replaced} 处（按 ${eolLabel(value.eol)} 规范化后匹配；${value.encoding} 写回）`
       }]
     },
     async execute(args, exec) {
@@ -533,20 +537,32 @@ function editTextDefinition(ctx) {
       if (!canEncode(decoded.encoding)) {
         throw new Error(`无法编辑 "${opened.displayPath}"：该文件是 ${encodingLabel(decoded.encoding, decoded.bom)}，不支持按该字符集写回`)
       }
+      const style = detectEol(decoded.text)
       const eol = dominantEol(decoded.text, DEFAULT_NEW_EOL)
+      const mixed = style === 'mixed'
       const oldString = normalizeEol(stripBom(oldRaw), eol)
       const newString = normalizeEol(stripBom(newRaw), eol)
       if (oldString === newString) throw new Error('old_string 与 new_string 相同，这次编辑没有意义')
-      const occurrences = decoded.text.split(oldString).length - 1
       const replaceAll = args?.replace_all === true
+      // 行尾混排：host 的 fs.editText 会把整份文本统一成它探测到的主导风格
+      // （restoreLineEndings ← detectLineEndings），没改过的行也会被写进 diff。
+      // 这里改走「只替换命中区间」：未命中的字节（含各行自己的行尾）原样保留。
+      const mixedPlan = mixed
+        ? planEolPreservingEdit(decoded.text, stripBom(oldRaw), stripBom(newRaw), replaceAll)
+        : undefined
+      const occurrences = mixedPlan === undefined
+        ? decoded.text.split(oldString).length - 1
+        : mixedPlan.occurrences
       if (occurrences === 0) {
-        throw new Error(`在 "${opened.displayPath}" 中找不到 old_string（已按 ${eolLabel(eol)} 规范化换行）。请先用 read_text 确认原文，注意行首缩进与全角/半角符号。`)
+        throw new Error(mixed
+          ? `在 "${opened.displayPath}" 中找不到 old_string（已按裸换行匹配；该文件是 CRLF/LF 混排，未改动任何行尾）。请先用 read_text 确认原文，注意行首缩进与全角/半角符号。`
+          : `在 "${opened.displayPath}" 中找不到 old_string（已按 ${eolLabel(eol)} 规范化换行）。请先用 read_text 确认原文，注意行首缩进与全角/半角符号。`)
       }
       if (occurrences > 1 && !replaceAll) {
         throw new Error(`old_string 在 "${opened.displayPath}" 中出现 ${occurrences} 次，不唯一。请补足上下文使其唯一，或传 replace_all: true。`)
       }
 
-      const fastPath = opened.kind === 'local' && decoded.encoding === 'utf-8'
+      const fastPath = !mixed && opened.kind === 'local' && decoded.encoding === 'utf-8'
       if (fastPath) {
         try {
           await ctx.fs.editText(
@@ -562,9 +578,11 @@ function editTextDefinition(ctx) {
         const after = await ctx.fs.stat(opened.target, exec.signal)
         if (after !== undefined) ctx.emit('fs/observed', opened.target, { kind: 'present', version: after.version }, exec)
       } else {
-        const updated = replaceAll
-          ? decoded.text.split(oldString).join(newString)
-          : replaceFirst(decoded.text, oldString, newString)
+        const updated = mixedPlan !== undefined
+          ? mixedPlan.text
+          : replaceAll
+            ? decoded.text.split(oldString).join(newString)
+            : replaceFirst(decoded.text, oldString, newString)
         if (opened.kind === 'remote') {
           const payload = await encodeText(ctx, exec, updated, decoded.encoding, decoded.bom)
           await remoteWriteBytes(ctx, exec, opened.remote, payload)
@@ -582,7 +600,7 @@ function editTextDefinition(ctx) {
       return {
         path: opened.displayPath,
         replaced: replaceAll ? occurrences : 1,
-        eol,
+        eol: mixed ? 'mixed' : eol,
         encoding: decoded.encoding,
         ...(opened.kind === 'remote' ? { remote: true } : {})
       }
