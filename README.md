@@ -131,7 +131,20 @@ MSYS2 / Cygwin 的 python 用 posixpath，`D:\...` 形式的绝对路径会被�
 
 ## 兼容性
 
-适配目标：**DSH Desktop 0.2.1-rc.2**（schemastery 3.18.5 / react 18）。相对 1.3.0 的适配点：
+适配目标：**DSH Desktop 0.2.2-rc.1**（schemastery 3.19.0 / cordis 4.1.0 / react 18）。
+
+相对 1.4.8 的适配点（0.2.1 → 0.2.2）：
+
+- **预设子行配置跟随 0.2.2**：`dsh-tool-subagent` 的 `modelSelectionSettings` 改为
+  `modelSelection` + `modelDiscovery`，并彻底去掉已废弃的 `backgroundMode`。
+  0.2.2 的 Config schema 会拒绝未知键，旧字段会让整条 `generic` 预设挂载失败。
+- **移除 `tool-subagent-list-agents` 行**：0.2.2 的 `@deepseek-ai/dsh-tool-subagent-control`
+  不再导出 `./list-agents` 子路径（`list_agents` 工具已并入主入口 `lib/index.js`），
+  保留该行会让预设名册报 `never started`，卡片显示「加载失败」。
+- **兼容门禁只认 DSH 自身**：`engines.dsh` 或 `@deepseek-ai/dsh*` 的 peer 才参与准入，
+  `@deepseek-ai/schemastery`、`react` 这类 peer 不参与，运行时不匹配也不会被拒。
+
+相对 1.3.0 的适配点（沿用）：
 
 - **工具重名改为显式裁决**：0.2.1-rc.2 里 preset 层的注册会**遮蔽**宿主层同名工具（只有同一层内重复才报错），
   所以 `read` / `write` / `edit` 有意接管（保留编码 / 换行 / 远程语义），`pwsh` / `read_image` 让给出货实现
