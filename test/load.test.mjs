@@ -180,8 +180,10 @@ check('能力清单注册为系统提示词上下文（避免模型靠试探猜�
   const capabilityContext = state.contexts.find((entry) => entry.name === 'agentkit:capabilities')
   assert.ok(capabilityContext !== undefined, '应注册 agentkit:capabilities 上下文')
   assert.equal(capabilityContext.order, 110)
-  assert.match(capabilityContext.text, /- fs: read, read_many, write, edit, list_dir/)
-  assert.doesNotMatch(capabilityContext.text, /- sftp:/, '未启用的能力不应出现')
+  assert.equal(typeof capabilityContext.text, 'function', '必须是动态 text：静态字符串会让关掉的能力一直留在旧会话里')
+  const text = capabilityContext.text({ scope: {} })
+  assert.match(text, /- fs: read, read_many, write, edit, list_dir/)
+  assert.doesNotMatch(text, /- sftp:/, '未启用的能力不应出现')
 })
 
 check('能力全部关掉时不注册清单上下文', () => {

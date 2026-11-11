@@ -12,7 +12,6 @@
       - id: persona
         name: '@deepseek-ai/dsh-persona'
         config:
-          complete: true
           includeRuntimeContext: true
           prefix: |
             你运行在 Windows。工作方式是：文件是交接面，工具结果只是索引。
@@ -43,7 +42,7 @@
       - id: toolkit
         name: '@local/dsh-agentkit'
         config:
-          tools: [fs, sftp, run, sh, pwsh, env, proxy, tasks, guard, preset]
+          tools: [fs, run, sh, pwsh, env, proxy, tasks, guard]
       - id: search-tools
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:

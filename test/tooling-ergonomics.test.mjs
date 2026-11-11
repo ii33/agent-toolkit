@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict'
 import { applyEditObservation } from '../lib/edit-observation.js'
-import { renderCapabilities } from '../lib/capabilities-context.js'
+import { applyCapabilitiesContext, renderCapabilities } from '../lib/capabilities-context.js'
 
 let passed = 0
 function check(name, fn) {
@@ -90,6 +90,57 @@ check('全关时为空串（不产生提示词）', () => {
   assert.equal(renderCapabilities([]), '')
   assert.equal(renderCapabilities(['guard']), '')
   assert.equal(renderCapabilities(undefined), '')
+})
+
+check('传入注册报告时只列实际注册成功的工具', () => {
+  // fs 能力声明 5 个工具，但 write 被让出（出货工具占用）、list_dir 重入跳过
+  const report = { registered: ['read', 'read_many', 'edit'], takenOver: [], yielded: ['write'], reentrant: ['list_dir'] }
+  const text = renderCapabilities(['fs'], report)
+  assert.match(text, /- fs: read, read_many, edit/)
+  assert.doesNotMatch(text, /write/, '被让出的工具不能出现在提示词里')
+  assert.doesNotMatch(text, /list_dir/, '重入跳过的工具不能出现在提示词里')
+})
+
+check('能力被关闭时该能力整行消失', () => {
+  const report = { registered: ['read', 'edit', 'sh'], takenOver: [], yielded: [], reentrant: [] }
+  const text = renderCapabilities(['fs', 'sh'], report)
+  assert.match(text, /- fs: read, edit/)
+  assert.match(text, /- sh: sh/)
+  assert.doesNotMatch(text, /- sftp:/)
+  assert.doesNotMatch(text, /- tasks:/)
+})
+
+check('某能力的工具全被让出时整行不出现', () => {
+  const report = { registered: [], takenOver: [], yielded: ['read', 'read_many', 'write', 'edit', 'list_dir'], reentrant: [] }
+  assert.equal(renderCapabilities(['fs'], report), '')
+})
+
+check('接管（takenOver）的工具算作可用', () => {
+  const report = { registered: [], takenOver: ['read'], yielded: [], reentrant: [] }
+  assert.match(renderCapabilities(['fs'], report), /- fs: read/)
+})
+
+console.log('\napplyCapabilitiesContext 动态性')
+
+check('注册的 text 是函数且每次按当前能力重算', () => {
+  const registered = []
+  const ctx = { systemPrompt: { context: (entry) => registered.push(entry) } }
+  assert.equal(applyCapabilitiesContext(ctx, ['fs', 'sh']), true)
+  const entry = registered[0]
+  assert.equal(entry.name, 'agentkit:capabilities')
+  assert.equal(typeof entry.text, 'function', '必须动态求值：静态字符串会把已关闭的能力留在旧会话提示词里')
+  const first = entry.text({ scope: {} })
+  assert.match(first, /- sh: sh/)
+  // 模拟"能力被关掉"后重新渲染（旧会话下一轮）
+  const narrower = renderCapabilities(['fs'])
+  assert.doesNotMatch(narrower, /- sh:/)
+})
+
+check('能力全关时不注册上下文', () => {
+  const registered = []
+  const ctx = { systemPrompt: { context: (entry) => registered.push(entry) } }
+  assert.equal(applyCapabilitiesContext(ctx, ['guard']), false)
+  assert.equal(registered.length, 0)
 })
 
 check('明确要求优先用工具而不是 shell', () => {
