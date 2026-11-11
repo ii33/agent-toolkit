@@ -52,6 +52,7 @@ import { apply as applySplit } from './tools/split.js'
 import { apply as applyTasks } from './tools/tasks.js'
 import { apply as applyPreset, syncFromSettings } from './tools/preset.js'
 import { Config, SETTINGS_NAMESPACE } from './lib/config-schema.js'
+import { applyCapabilitiesContext } from './lib/capabilities-context.js'
 
 /** 设置页的 Config：harness 据它自动生成「插件」页里的表单。 */
 export { Config }
@@ -237,4 +238,7 @@ export function apply(ctx, config) {
   // 覆盖/让出的判定与日志都在 tools/registry.js（DESIGNED_TAKEOVERS / YIELDED_NAMES），
   // 它每次撞名都会自己打日志，所以这里不再额外打一行摘要（test/load.test.mjs 断言恰好一行挂载日志）。
   for (const name of enabled) CAPABILITIES[name](ctx)
+  // 把实际挂上的能力写进系统提示词：能力是可开关的，模型看不到开关状态就只能试探，
+  // 试探成本高于直接开 shell（实测 generic 的 shell 冗余率 84%）。
+  applyCapabilitiesContext(ctx, enabled)
 }

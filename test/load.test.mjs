@@ -167,11 +167,27 @@ check('不传 config 时挂载全部能力', () => {
 check('tasks 能力注册了面板注入与 agent 监听', () => {
   const { ctx, state } = fakeCtx()
   apply(ctx, { tools: ['tasks'] })
-  assert.equal(state.contexts.length, 1)
-  assert.equal(state.contexts[0].name, 'doc-pipeline:panel')
-  assert.equal(typeof state.contexts[0].text, 'function')
-  assert.equal(state.contexts[0].text({ scope: {} }), '', '无账本时面板应为空串')
+  const panels = state.contexts.filter((entry) => entry.name === 'doc-pipeline:panel')
+  assert.equal(panels.length, 1)
+  assert.equal(typeof panels[0].text, 'function')
+  assert.equal(panels[0].text({ scope: {} }), '', '无账本时面板应为空串')
   assert.ok(state.listeners.some((entry) => entry.event === 'agent/created'))
+})
+
+check('能力清单注册为系统提示词上下文（避免模型靠试探猜能力开关）', () => {
+  const { ctx, state } = fakeCtx()
+  apply(ctx, { tools: ['fs', 'sh'] })
+  const capabilityContext = state.contexts.find((entry) => entry.name === 'agentkit:capabilities')
+  assert.ok(capabilityContext !== undefined, '应注册 agentkit:capabilities 上下文')
+  assert.equal(capabilityContext.order, 110)
+  assert.match(capabilityContext.text, /- fs: read, read_many, write, edit, list_dir/)
+  assert.doesNotMatch(capabilityContext.text, /- sftp:/, '未启用的能力不应出现')
+})
+
+check('能力全部关掉时不注册清单上下文', () => {
+  const { ctx, state } = fakeCtx()
+  apply(ctx, { tools: ['guard'] })
+  assert.equal(state.contexts.filter((entry) => entry.name === 'agentkit:capabilities').length, 0)
 })
 
 check('guard 能力注册 agent/created 监听', () => {

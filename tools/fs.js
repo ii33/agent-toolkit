@@ -32,6 +32,7 @@ import { currentPolicy, formatBytes, normalizePathInput, optionalPositiveInt, re
 import { assertPathAllowed, escalationSchemaFields, resolveWritePolicy, withSandboxHint } from '../lib/sandbox.js'
 import { MAX_REMOTE_BYTES, remoteList, remoteReadBytes, remoteStat, remoteWriteBytes, resolveRemote } from '../lib/remote.js'
 import { createToolRegistrar } from './registry.js'
+import { applyEditObservation } from '../lib/edit-observation.js'
 
 /** 需要 tools 与 fs 两个服务。 */
 export const inject = ['tools', 'fs']
@@ -219,7 +220,8 @@ function readHeader(value) {
 function readTextDefinition(ctx) {
   return {
     name: 'read',
-    description: '读取文本文件（本地或 `代号:/远程/路径`），返回带行号的内容与编码、换行、总行数；'
+    description: '读取文本文件（本地或 `代号:/远程/路径`），返回内容与编码、换行、总行数；'
+      + '默认不带行号（内容可直接用于 edit 的 old_string），需要行号定位时传 numbered: true；'
       + '单次输出受 256KB 字节与单行 8000 字符上限保护，被截断时给出续读 offset。'
       + '同时看几个文件用 read_many；按内容检索用 grep。',
     parameters: {
@@ -229,7 +231,7 @@ function readTextDefinition(ctx) {
         file_path: { type: 'string', description: '文件路径；相对路径以当前会话工作目录为基准；`nas:/data/a.md` 表示远程主机。也接受 path。' },
         offset: { type: 'number', description: '起始行号，从 1 开始。默认 1；越界会报错。' },
         limit: { type: 'number', description: `本次最多返回的行数，默认 ${DEFAULT_LINE_LIMIT}，上限 ${MAX_LINE_LIMIT}（超过会报错，不会静默截断）。` },
-        numbered: { type: 'boolean', description: '是否给每行加 `行号+制表符` 前缀。默认 true。' }
+        numbered: { type: 'boolean', description: '是否给每行加 `行号+制表符` 前缀。默认 false：不带行号的正文可以直接作为 edit 的 old_string。' }
       },
       required: ['file_path']
     },
@@ -269,7 +271,9 @@ function readTextDefinition(ctx) {
         throw new Error(`limit 上限是 ${MAX_LINE_LIMIT} 行（收到 ${requestedLimit}）；要读更多请用 offset 分批读`)
       }
       const limit = requestedLimit
-      const numbered = args?.numbered !== false
+      // 默认不加行号：带 `行号\t` 前缀的正文没法直接当 edit 的 old_string，
+      // 模型于是改用 `sed -n 'A,Bp'` 之类的 shell 命令取原文（实测 52% 的 shell 调用干这个）。
+      const numbered = args?.numbered === true
       const opened = await openTarget(ctx, exec, requested)
       if (opened.info === undefined) throw new Error(`无法读取 "${opened.displayPath}"：路径不存在`)
       if (opened.info.type === 'directory') throw new Error(`"${opened.displayPath}" 是目录，请改用 list_dir`)
@@ -815,7 +819,7 @@ function readManyDefinition(ctx, readTool) {
           items: { type: 'string' },
           description: `文件路径列表（本地或 \`代号:/远程/路径\`）；个数超过 max_files（默认 ${DEFAULT_READ_MANY_FILES}）会报错，不再静默丢弃多余的。`
         },
-        numbered: { type: 'boolean', description: '是否带行号，默认 true。' },
+        numbered: { type: 'boolean', description: '是否带行号，默认 false（与 read 一致：正文可直接用于 edit）。' },
         limit: { type: 'number', description: `每个文件最多读多少行，默认 ${DEFAULT_LINE_LIMIT}，上限 ${MAX_LINE_LIMIT}（超过会报错）。` }
       },
       required: []
@@ -867,6 +871,7 @@ function readManyDefinition(ctx, readTool) {
         try {
           const value = await readTool.execute({
             file_path: path,
+            // read 自身默认 false；这里要显式传，否则 read_many 的默认值会被 read 的语义覆盖成「不带行号」
             ...(args?.numbered === undefined ? {} : { numbered: args.numbered }),
             ...(args?.limit === undefined ? {} : { limit: args.limit })
           }, exec)
@@ -896,4 +901,7 @@ export function apply(ctx) {
   register(writeTextDefinition(ctx))
   register(editTextDefinition(ctx))
   register(listDirDefinition(ctx))
+  // 编辑前"必须先读"的硬性拒绝是 shell 绕行的主要诱因之一；版本 CAS 才是并发保护，
+  // 所以这里只放行 FS_NOT_OBSERVED（详见 lib/edit-observation.js）。
+  applyEditObservation(ctx)
 }

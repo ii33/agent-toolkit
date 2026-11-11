@@ -59,18 +59,18 @@ const readTool = (tools) => tools.find((tool) => tool.name === 'read')
 
 console.log('read_text')
 
-await check('默认带行号（`行号+制表符`）', async () => {
+await check('默认不带行号（正文可直接作为 edit 的 old_string）', async () => {
   const { tools, exec } = harness(utf8('a\nb\nc'))
   const value = await readTool(tools).execute({ path: 'a.txt' }, exec)
-  assert.equal(value.text, '1\ta\n2\tb\n3\tc')
+  assert.equal(value.text, 'a\nb\nc')
   assert.equal(value.total_lines, 3)
   assert.equal(value.truncated, false)
 })
 
-await check('numbered:false 时不带行号', async () => {
+await check('numbered:true 时带行号（`行号+制表符`）', async () => {
   const { tools, exec } = harness(utf8('a\nb'))
-  const value = await readTool(tools).execute({ path: 'a.txt', numbered: false }, exec)
-  assert.equal(value.text, 'a\nb')
+  const value = await readTool(tools).execute({ path: 'a.txt', numbered: true }, exec)
+  assert.equal(value.text, '1\ta\n2\tb')
 })
 
 await check('默认窗口 400 行，并标记可续读', async () => {
@@ -115,15 +115,24 @@ await check('offset 越界直接报错', async () => {
   )
 })
 
-await check('大文件走流式路径且跨块拼接正确', async () => {
+await check('大文件走流式路径且跨块拼接正确（带行号）', async () => {
   const lines = Array.from({ length: 3000 }, (_, index) => `第${index + 1}行 content`)
   const bytes = utf8(lines.join('\n'))
   const { tools, exec } = harness(bytes, { size: 12 * 1024 * 1024 })
-  const value = await readTool(tools).execute({ path: 'big.txt', limit: 50 }, exec)
+  const value = await readTool(tools).execute({ path: 'big.txt', limit: 50, numbered: true }, exec)
   assert.equal(value.total_lines, 3000)
   assert.equal(value.to, 50)
   assert.equal(value.text.split('\n')[0], '1\t第1行 content')
   assert.equal(value.text.split('\n')[49], '50\t第50行 content')
+})
+
+await check('大文件走流式路径：默认不带行号', async () => {
+  const lines = Array.from({ length: 3000 }, (_, index) => `第${index + 1}行 content`)
+  const bytes = utf8(lines.join('\n'))
+  const { tools, exec } = harness(bytes, { size: 12 * 1024 * 1024 })
+  const value = await readTool(tools).execute({ path: 'big.txt', limit: 50 }, exec)
+  assert.equal(value.text.split('\n')[0], '第1行 content')
+  assert.equal(value.text.split('\n')[49], '第50行 content')
 })
 
 await check('GBK 文件被正确解码并报告编码', async () => {
