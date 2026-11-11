@@ -126,7 +126,10 @@ export function renderPatch(state, overrides = []) {
     for (const line of preset.prompt.split('\n')) lines.push(`                ${line}`.trimEnd())
     lines.push(
       '              suffix: |',
-      '                当前工作目录是 {{cwd}}；相对路径都以它为基准。',
+      // 0.2.2-rc.2 起提示词变量白名单只保留 provider/model，{{cwd}} 会让整条 preset
+      // 挂载失败（unknown prompt variable in section deployment:persona-suffix）。
+      // 所以这里只写纯文本，不引用任何变量。
+      '                相对路径以会话的工作目录为基准（运行时上下文与工具结果里都有当前工作目录）。',
       '          - id: toolkit',
       `            name: '${PACKAGE_NAME}'`,
       '            config:',

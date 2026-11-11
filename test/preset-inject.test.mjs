@@ -249,6 +249,35 @@ check('真实 standard 预设：能读出它的 persona，编辑后其它行不�
   console.log(`      （standard 的 persona 原文 ${persona.length} 字符；编辑后仍保留 ${row.config.plugins.length} 行）`)
 })
 
+check('生成的预设只使用 rc.2 允许的提示词变量', () => {
+  // 0.2.2-rc.2 的 systemPrompt 只注册了 provider / model。
+  // 任何其它 {{var}} 都会让整条预设挂载失败：
+  //   unknown prompt variable "{{cwd}}" in section "deployment:persona-suffix"
+  const ALLOWED = new Set(['provider', 'model'])
+  const doc = { id: 'generic', name: '通用环境', description: '', order: 20, content: '- id: persona\n  name: x' }
+  const block = renderEditOverride(doc, {
+    capabilities: ['fs'],
+    persona: '你是一个 agent。',
+    suffix: '相对路径以工作目录为基准。'
+  })
+  const used = [...block.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1])
+  const bad = used.filter((name) => !ALLOWED.has(name))
+  assert.deepEqual(bad, [], `生成的预设引用了 rc.2 不认识的变量：${bad.join(', ')}`)
+})
+
+check('仓库里的补丁文件也不引用 rc.2 之外的变量', () => {
+  const ALLOWED = new Set(['provider', 'model'])
+  const files = ['cordis.patch.yml', 'presets.generated.patch.yml']
+  for (const file of files) {
+    const text = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
+    // 只看真正生效的 YAML 行，忽略注释
+    const live = text.split('\n').filter((line) => !line.trimStart().startsWith('#')).join('\n')
+    const used = [...live.matchAll(/\{\{(\w+)\}\}/g)].map((m) => m[1])
+    const bad = used.filter((name) => !ALLOWED.has(name))
+    assert.deepEqual(bad, [], `${file} 引用了 rc.2 不认识的变量：${bad.join(', ')}`)
+  }
+})
+
 // syncFromSettings：设置页的编辑 → 覆盖声明（这正是"保存成功但没反应"的那条路径）
 {
   const ctx = memoryContext()

@@ -18,12 +18,10 @@
 
             可用工具
             - read / write / edit / list_dir：读写本地或远程文件（`代号:/远程/路径`）。编码（utf-8 / gbk / utf-16）与换行（LF / CRLF）自动处理，**写回按原字符集编码**，你不需要关心转换。
-            - sftp_hosts：列出 / 写入 / 删除远程主机代号，ping 验证凭据。
             - run：argv 直连执行程序（不需要引号转义）；sh：bash；pwsh：PowerShell 7（Windows 原生操作用它，5.1 与 cmd 已禁用）。
             - env_setup / pip_install：探测环境、按镜像装依赖、把结论写进 ENV.md。
             - net_check：探测外网与本地代理；代理端口在 dsh-plugin.json 的 proxy.port 里填。
             - plan_init / task_update / task_show / stage_set：任务面板（摘要会自动出现在你的上下文里）。
-            - preset_create / preset_list / preset_delete：新建、列出、删除自定义 agent 预设（写进本插件的 presets.generated.patch.yml，之后在「新会话」里可选）。
 
             纪律
             1. 多步任务先 plan_init 写下目标与清单；每推进一步立刻 task_update，再开始下一步。
@@ -38,7 +36,7 @@
             10. 长任务：后台进程用 job_list / job_output / job_kill 收集；交付文件用 present 声明成卡片给用户。
             11. 委派与编排：需要隔离上下文或并行时用 subagent / subagent_fork / list_agents，跨步骤流水线可用 workflow；除非确有并行收益，优先单会话串行。
           suffix: |
-            当前工作目录是 {{cwd}}；相对路径都以它为基准。要动工作区外的路径前先确认，必要时按第 8 条申请。
+            相对路径以会话的工作目录为基准（运行时上下文与工具结果里都有当前工作目录）。要动工作区外的路径前先确认，必要时按第 8 条申请。
       - id: toolkit
         name: '@local/dsh-agentkit'
         config:
