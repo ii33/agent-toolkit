@@ -88,8 +88,8 @@ check('列出已启用能力的工具名', () => {
 
 check('全关时为空串（不产生提示词）', () => {
   assert.equal(renderCapabilities([]), '')
-  assert.equal(renderCapabilities(['guard']), '')
   assert.equal(renderCapabilities(undefined), '')
+  // 注意：['guard'] 不再为空 —— guard 不注册工具，但纪律条款仍要出现，见下方专项用例。
 })
 
 check('传入注册报告时只列实际注册成功的工具', () => {
@@ -112,7 +112,9 @@ check('能力被关闭时该能力整行消失', () => {
 
 check('某能力的工具全被让出时整行不出现', () => {
   const report = { registered: [], takenOver: [], yielded: ['read', 'read_many', 'write', 'edit', 'list_dir'], reentrant: [] }
-  assert.equal(renderCapabilities(['fs'], report), '')
+  const text = renderCapabilities(['fs'], report)
+  assert.doesNotMatch(text, /- fs:/, '全被让出时不应列出 fs 行')
+  assert.match(text, /工具描述与实测能力不一致要报/, '但纪律条款仍要在')
 })
 
 check('接管（takenOver）的工具算作可用', () => {
@@ -139,8 +141,13 @@ check('注册的 text 是函数且每次按当前能力重算', () => {
 check('能力全关时不注册上下文', () => {
   const registered = []
   const ctx = { systemPrompt: { context: (entry) => registered.push(entry) } }
-  assert.equal(applyCapabilitiesContext(ctx, ['guard']), false)
-  assert.equal(registered.length, 0)
+  // guard 不注册任何工具，但纪律条款仍要挂上 → 返回 true
+  assert.equal(applyCapabilitiesContext(ctx, ['guard']), true)
+  assert.equal(registered.length, 1)
+  assert.match(registered[0].text({ scope: {} }), /工具描述与实测能力不一致要报/)
+  // 真正的"全关"（空数组）才不注册
+  assert.equal(applyCapabilitiesContext(ctx, []), false)
+  assert.equal(registered.length, 1)
 })
 
 check('明确要求优先用工具而不是 shell', () => {
@@ -173,6 +180,26 @@ check('不为本插件不提供的工具写建议（如 grep）', () => {
   // 早先写 has('grep') 恒为 false，那条建议永远不出现，还容易误导归属。
   const text = renderCapabilities(['fs', 'sh'])
   assert.doesNotMatch(text, /^- 搜内容用 grep/m, '不应声称 grep 是本插件的工具')
+})
+
+check('纪律条款：描述与实测不一致要报', () => {
+  const text = renderCapabilities(['fs'])
+  assert.match(text, /工具描述与实测能力不一致要报/)
+  assert.match(text, /直接调用一次看结果，以调用结果为准/, '必须给出实测优先于描述的指令')
+  assert.match(text, /先按实测继续/, '发现不一致时不能被描述卡住')
+  assert.match(text, /明确指出这处不一致/, '必须回报不一致')
+})
+
+check('纪律条款始终存在（本插件无工具时也出现）', () => {
+  const report = { registered: [], takenOver: [], yielded: [], reentrant: [] }
+  const text = renderCapabilities(['guard'], report)
+  assert.match(text, /工具描述与实测能力不一致要报/, 'guard 不注册工具，但纪律仍要出现')
+})
+
+check('空能力列表仍返回空串（不注册上下文）', () => {
+  // 与"有 guard 但无工具"区分：完全没能力时不产生任何提示词
+  assert.equal(renderCapabilities([]), '')
+  assert.equal(renderCapabilities(undefined), '')
 })
 
 console.log(`\n${passed} 项通过`)

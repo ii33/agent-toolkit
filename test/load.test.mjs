@@ -186,10 +186,12 @@ check('能力清单注册为系统提示词上下文（避免模型靠试探猜�
   assert.doesNotMatch(text, /- sftp:/, '未启用的能力不应出现')
 })
 
-check('能力全部关掉时不注册清单上下文', () => {
+check('仅 guard 时仍注册清单上下文（承载纪律条款）', () => {
   const { ctx, state } = fakeCtx()
   apply(ctx, { tools: ['guard'] })
-  assert.equal(state.contexts.filter((entry) => entry.name === 'agentkit:capabilities').length, 0)
+  const found = state.contexts.filter((entry) => entry.name === 'agentkit:capabilities')
+  assert.equal(found.length, 1, '纪律条款必须始终出现，即使本插件没挂任何工具')
+  assert.match(found[0].text({ scope: {} }), /工具描述与实测能力不一致要报/)
 })
 
 check('guard 能力注册 agent/created 监听', () => {
