@@ -114,8 +114,11 @@ for (const [preset, capabilities] of Object.entries(PRESETS)) {
     const names = state.tools.map((tool) => tool.name)
     const expected = capabilities.flatMap((name) => EXPECTED[name])
     assert.deepEqual([...names].sort(), [...expected].sort(), `${preset} 注册的工具名不符`)
-    assert.equal(state.logs.length, 1, '应当恰好打一行挂载日志')
+    assert.equal(state.logs.length, 2, '挂载日志 + 生效摘要各一行')
     assert.match(state.logs[0], /agent-toolkit: tools = /)
+    // 生效摘要让"开关有没有真的生效"在日志里可见，而不是只剩一句"已保存"
+    assert.match(state.logs[1], /agent-toolkit: 生效工具 \d+ 个/)
+    assert.match(state.logs[1], /快照 /)
   })
 }
 

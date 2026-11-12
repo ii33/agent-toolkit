@@ -34,13 +34,13 @@
             8. 写入被沙箱拒绝时：若确实需要工作区外，带 sandbox_permissions（workspace-write / danger-full-access）与 justification 重试**一次**（用户会收到审批）；否则改写到工作区内。
             9. 技能：技能文件放在 `.dsh/skills/<名字>/SKILL.md`（只加载这一个目录，不扫全局）。清单会自动出现在你上下文里，需要细节时用 skill 工具加载正文。
             10. 长任务：后台进程用 job_list / job_output / job_kill 收集；交付文件用 present 声明成卡片给用户。
-            11. 委派与编排：需要隔离上下文或并行时用 subagent / subagent_fork / list_agents，跨步骤流水线可用 workflow；除非确有并行收益，优先单会话串行。
+            11. 委派与编排：多个子任务**互不依赖、写盘范围不重叠**时，用 subagent 并行派发（可一次发起多个）， 不要自己串起来一个个做；需要继承当前上下文用 subagent_fork，跨步骤流水线用 workflow。 只有真正有前后依赖、或写同一批文件时，才按顺序串行。
           suffix: |
             相对路径以会话的工作目录为基准（运行时上下文与工具结果里都有当前工作目录）。要动工作区外的路径前先确认，必要时按第 8 条申请。
       - id: toolkit
         name: '@local/dsh-agentkit'
         config:
-          tools: [fs, run, sh, pwsh, env, proxy, tasks, guard]
+          tools: [fs, run, sh, pwsh, env, proxy, tasks, guard, img]
       - id: search-tools
         name: '@deepseek-ai/dsh-tool-fs-search'
         config:

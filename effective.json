@@ -1,0 +1,90 @@
+{
+  "at": "2026-11-12T22:31:39.304Z",
+  "enabled": [
+    "fs"
+  ],
+  "registered": [
+    "edit",
+    "list_dir",
+    "read",
+    "read_many",
+    "write"
+  ],
+  "total": 5,
+  "capabilities": {
+    "fs": {
+      "on": true,
+      "active": true,
+      "tools": [
+        "read",
+        "read_many",
+        "write",
+        "edit",
+        "list_dir"
+      ]
+    },
+    "run": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "sh": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "pwsh": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "sftp": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "env": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "proxy": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "doc": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "split": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "img": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "tasks": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "guard": {
+      "on": false,
+      "active": false,
+      "tools": []
+    },
+    "preset": {
+      "on": false,
+      "active": false,
+      "tools": []
+    }
+  },
+  "yielded": [],
+  "takenOver": [],
+  "skipped": []
+}

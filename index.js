@@ -54,6 +54,7 @@ import { apply as applyPreset, syncFromSettings } from './tools/preset.js'
 import { Config, SETTINGS_NAMESPACE } from './lib/config-schema.js'
 import { applyCapabilitiesContext } from './lib/capabilities-context.js'
 import { collisionReportOf } from './tools/registry.js'
+import { writeEffectiveSnapshot } from './lib/effective-snapshot.js'
 
 /** 设置页的 Config：harness 据它自动生成「插件」页里的表单。 */
 export { Config }
@@ -246,5 +247,15 @@ export function apply(ctx, config) {
   // 把实际挂上的能力写进系统提示词：能力是可开关的，模型看不到开关状态就只能试探，
   // 试探成本高于直接开 shell（实测 generic 的 shell 冗余率 84%）。
   // 必须传注册层报告：被让出（yielded/reentrant）的工具不能出现在提示词里。
-  applyCapabilitiesContext(ctx, enabled, collisionReportOf(ctx))
+  const report = collisionReportOf(ctx)
+  applyCapabilitiesContext(ctx, enabled, report)
+  // 生效快照：设置页勾了能力之后，用户需要能确认"到底生效了没有"。
+  // 日志只给一行摘要，落盘的文件才是可查的凭据。
+  const snapshot = writeEffectiveSnapshot(enabled, report, ctx.logger)
+  const active = Object.entries(snapshot.capabilities)
+    .filter(([, state]) => state.on && state.tools.length > 0)
+    .map(([name, state]) => `${name}(${state.tools.length})`)
+  ctx.logger?.info(`agent-toolkit: 生效工具 ${snapshot.total} 个 —— `
+    + `开关打开 ${enabled.length} 项，其中实际注册 ${active.join(', ') || '（无）'}`
+    + `；快照 ${snapshot.file}`)
 }
