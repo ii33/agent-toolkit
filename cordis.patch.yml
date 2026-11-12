@@ -103,11 +103,37 @@
               watch: true
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
-          # 委派与编排（subagent / subagent_fork / workflow / list_agents）不在预设里挂：
-          # 0.2.2-rc.2 的 dsh-base 已在全局提供它们（含 subagents 的 spawn / fork provider）。
-          # 预设内重复挂载只会「scoped 遮蔽 global」，并且 isolate: { workflowEngine: true }
-          # 会造出第二个 workflowEngine 实例。
-          # 要改委派行的配置，请在 profile 层按 id 覆盖（见文件末尾的 tool-subagent 覆盖块）。
+          # 委派与编排：**必须挂在这里**。
+          # 曾经为消除"scoped 遮蔽 global"的重复而删掉，导致新会话 subagent 全无
+          # （实测：11-12 00:47 后创建的 generic 会话工具数 47→39，缺 subagent /
+          # subagent_fork / workflow / list_agents / wait_agent）。
+          # dsh-base 的全局行在预设作用域内并不会真正提供这些工具，重复注册的代价远小于功能缺失。
+          - id: delegation
+            name: cordis:group
+            group: true
+            isolate:
+              workflowEngine: true
+            config:
+              - id: tool-subagent-control
+                name: '@deepseek-ai/dsh-tool-subagent-control'
+              - id: tool-subagent
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: spawn
+                  toolName: subagent
+                  modelSelection: true
+                  modelDiscovery: true
+              - id: tool-subagent-fork
+                name: '@deepseek-ai/dsh-tool-subagent'
+                config:
+                  provider: fork
+                  toolName: subagent_fork
+              - id: workflow-ptc
+                name: '@deepseek-ai/dsh-workflow-ptc'
+                config:
+                  provider: spawn
+              - id: tool-workflow
+                name: '@deepseek-ai/dsh-tool-workflow'
           - id: planning
             name: cordis:group
             group: true
@@ -139,15 +165,4 @@
                   thresholdChars: 8192
                   headChars: 4096
                   tailChars: 1024
-
-# —— profile 层覆盖（顶层行，按 id 替换 dsh-base 的全局行）——
-# 期望：generic 会话里的 subagent 支持「选模型」。
-# patch 是整块替换 config，所以 base 的字段必须重述。
-- id: tool-subagent
-  name: '@deepseek-ai/dsh-tool-subagent'
-  config:
-    provider: spawn
-    toolName: subagent
-    modelSelection: true
-    modelDiscovery: true
 # preset_create: 2026-11-12T03:17:36.970Z
