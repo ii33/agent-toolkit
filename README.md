@@ -113,6 +113,8 @@ node test/client-render.test.mjs    # 客户端卡片 SSR 渲染
 node test/preset-inject.test.mjs    # 预设注入/编辑（含真实出货预设）
 node test/eol-mixed.test.mjs        # 混合行尾编辑：只替换命中区间，保留各行行尾
 node test/tooling-ergonomics.test.mjs  # read 默认无行号 / edit 放宽观测 / 能力清单上下文
+node test/gate-reconcile.test.mjs   # 设置页关能力后自动裁剪预设能力表
+node test/tasks-isolation.test.mjs  # 账本按会话隔离
 node test/measure-capabilities.mjs  # 各能力的 token 成本
 node test/measure.mjs <会话日志>     # 各 preset 的系统提示词 + 工具 schema 占用（需要一份会话日志路径）
 ```
@@ -133,7 +135,14 @@ MSYS2 / Cygwin 的 python 用 posixpath，`D:\...` 形式的绝对路径会被�
 
 ## 兼容性
 
-适配目标：**DSH Desktop 0.2.2-rc.1**（schemastery 3.19.0 / cordis 4.1.0 / react 18）。
+适配目标：**DSH Desktop 0.2.2-rc.2**（schemastery 3.19.0 / cordis 4.1.0 / react 18）。
+
+相对 1.6.0 的适配点（0.2.2-rc.1 → 0.2.2-rc.2）：
+
+- **配置与实际生效对齐**：设置页关掉能力后，`syncFromSettings` 会把预设能力表里的对应项
+  自动移除（此前只拦截注册，补丁原样不动，只能人工删）。
+- **能力清单改为动态求值**：`text` 改为函数，旧会话下一轮就会反映最新的能力开关。
+- **账本按会话隔离**：默认 `.dsh/tasks/<sessionId>.md`，不再所有会话共用一份 `TASKS.md`。
 
 相对 1.4.8 的适配点（0.2.1 → 0.2.2）：
 
