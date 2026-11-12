@@ -67,4 +67,20 @@ check('名单与本地 guard 一致（禁 5.1 与 cmd，不牵连 pwsh）', () =
   assert.ok(REMOTE_EXECUTORS.includes('ssh'))
 })
 
+check('拒绝文案按场景拆分：本地不提跨主机', () => {
+  // 本地命令位置写 cmd 与"跨主机传文件"无关，那句提醒只会淹没真正的修复指引。
+  const local = localShellBanReason('cmd /c dir')
+  assert.equal(typeof local, 'string')
+  assert.doesNotMatch(local, /跨主机/, '本地拒绝不应提跨主机')
+  assert.doesNotMatch(local, /SFTP/, '本地拒绝不应提 SFTP')
+  assert.match(local, /pwsh/, '仍要给出可用的替代方案')
+})
+
+check('拒绝文案按场景拆分：远程保留场景说明', () => {
+  const remote = remoteShellBanReason('ssh host cmd /c dir')
+  assert.equal(typeof remote, 'string')
+  assert.match(remote, /远程主机/)
+  assert.match(remote, /pwsh/)
+})
+
 console.log(`\n${passed} 项通过`)
