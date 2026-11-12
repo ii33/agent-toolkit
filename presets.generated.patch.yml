@@ -60,11 +60,6 @@
           watch: true
       - id: tool-skill
         name: '@deepseek-ai/dsh-tool-skill'
-      # 委派与编排：**必须在预设作用域里挂**。
-      # 曾经为了消除"scoped 遮蔽 global"的重复而删掉这段，结果新会话的 subagent 全没了
-      # （实测 11-12 00:47 之后创建的 generic 会话工具数 47→39，缺 subagent/subagent_fork/
-      # workflow/list_agents/wait_agent）。base 的全局行在预设作用域里并没有真正提供这些工具。
-      # 结论：这段是必需的，重复注册的代价远小于功能缺失。
       - id: delegation
         name: cordis:group
         group: true

@@ -93,6 +93,32 @@ export function createToolRegistrar(ctx, policy = {}) {
   const report = REPORTS.get(ctx) ?? { total: 0, registered: [], takenOver: [], yielded: [], reentrant: [] }
   REPORTS.set(ctx, report)
   const seen = new Set()
+  // 已注册工具的卸载函数。**必须由本注册器持有**：
+  // `ctx.tools.register()` 返回的 disposer 没人调用时，那条注册会永远留在 scope 层里，
+  // 插件重载 / 配置变更后旧工具不会被移除，于是出现"能删不能加"的僵死状态。
+  const disposers = []
+
+  /**
+   * 卸载本次（以及同一 ctx 上历次）注册的全部工具。
+   *
+   * 逆序卸载：与注册顺序相反，避免依赖倒置时先撤底座。
+   * 幂等：卸载过的会被移出列表，重复调用无副作用。
+   * @returns {number} 实际卸载的工具数。
+   */
+  function disposeAll() {
+    let count = 0
+    while (disposers.length > 0) {
+      const dispose = disposers.pop()
+      try {
+        dispose()
+        count += 1
+      } catch (error) {
+        logger?.warn(`agentkit: 卸载工具失败 —— ${error instanceof Error ? error.message : String(error)}`)
+      }
+    }
+    seen.clear()
+    return count
+  }
 
   /**
    * 注册一个工具定义。
@@ -151,10 +177,36 @@ export function createToolRegistrar(ctx, policy = {}) {
     }
     OWN.add(definition)
     report.registered.push(name)
+    // 收进本注册器的待卸载列表：调用方即使忽略返回值，生命周期也不会丢。
+    if (typeof dispose === 'function') disposers.push(dispose)
     return dispose
   }
 
+  /**
+   * 把本次注册登记到 ctx.effect：插件卸载时自动调用 disposeAll。
+   *
+   * 调用方（各能力的 apply）只需 `register.own(ctx)` 一行；
+   * 这样"工具随插件生命周期卸载"是默认行为，不再依赖每个 apply 记得收尾。
+   * @returns {boolean} 是否成功登记（ctx.effect 不可用时返回 false）。
+   */
+  register.own = (target = ctx) => {
+    if (typeof target?.effect !== 'function') return false
+    try {
+      target.effect(() => disposeAll, 'agentkit:tools:dispose')
+      return true
+    } catch {
+      return false
+    }
+  }
+
   register.report = report
+  register.disposeAll = disposeAll
+  // **默认即自愈**：创建注册器时就把卸载函数登记到 ctx.effect，
+  // 这样 14 个能力的 apply 不必各自记得收尾 —— 之前正因为没人收尾，
+  // `ctx.tools.register()` 的 disposer 被丢弃，旧工具永不卸载（能删不能加）。
+  // 同一 ctx 上多次 createToolRegistrar（index.js 逐个能力挂载）会各自登记一次，
+  // 每个 effect 只卸载自己收集的那批，互不干扰。
+  register.own(ctx)
   return register
 }
 
