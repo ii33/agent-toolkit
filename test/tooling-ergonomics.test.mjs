@@ -150,4 +150,29 @@ check('明确要求优先用工具而不是 shell', () => {
   assert.match(text, /不要用 sed -i/)
 })
 
+check('措辞限定作用域，不暗示"这是全部工具"', () => {
+  const text = renderCapabilities(['fs', 'sh'])
+  // 曾经写「其余能力未启用，不要尝试」，被模型读成"本会话工具全集"，
+  // 据此误判 subagent / grep / glob / web_search 不可用而放弃委派。
+  assert.doesNotMatch(text, /其余能力未启用/, '不能断言其它来源的工具不可用')
+  assert.doesNotMatch(text, /不要尝试/, '不能阻止模型使用本清单之外的工具')
+  assert.match(text, /仅描述本插件自己注册的工具/)
+  assert.match(text, /其它来源的工具照常可用/)
+  assert.match(text, /以你实际看到的工具列表为准/)
+})
+
+check('提示检索结果需用 path 限定范围', () => {
+  const text = renderCapabilities(['fs'])
+  assert.match(text, /glob \/ grep/)
+  assert.match(text, /path 限定/)
+  assert.match(text, /缓存目录|历史快照/, '要点明污染来源')
+})
+
+check('不为本插件不提供的工具写建议（如 grep）', () => {
+  // grep/glob 由预设的 search-tools 行提供，不在本能力表里。
+  // 早先写 has('grep') 恒为 false，那条建议永远不出现，还容易误导归属。
+  const text = renderCapabilities(['fs', 'sh'])
+  assert.doesNotMatch(text, /^- 搜内容用 grep/m, '不应声称 grep 是本插件的工具')
+})
+
 console.log(`\n${passed} 项通过`)
