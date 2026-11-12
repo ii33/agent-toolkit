@@ -179,6 +179,60 @@ function replaceFirst(text, search, replacement) {
 }
 
 /**
+ * 诊断一次未命中的 `edit`：给出可操作的线索，而不是只说"找不到"。
+ *
+ * 做法：拿 old_string 的**首行**（去掉缩进）在文件里找近似行，报告行号与两侧差异。
+ * 缩进/全角半角/行尾这类细节差异，模型看到实际那一行就能自己改对。
+ *
+ * @param {string} text - 文件原文（应为归一化后的匹配基准）。
+ * @param {string} oldRaw - 未命中的 old_string 原文。
+ * @param {'crlf'|'lf'|'cr'} eol - 本次使用的换行风格，用于重建可匹配的基准。
+ * @returns {string} 追加到错误信息末尾的建议句。
+ */
+export function diagnoseMiss(text, oldRaw) {
+  const base = normalizeEol(String(oldRaw ?? ''), 'lf')
+  const firstRaw = base.split('\n')[0] ?? ''
+  const firstLine = firstRaw.trim()
+  const tail = '请先用 `read` 确认原文（行首缩进、全角/半角、行尾都可能不同）。'
+  if (firstLine === '') return tail
+  const lines = normalizeEol(text, 'lf').split('\n')
+  const wantLead = firstRaw.length - firstRaw.trimStart().length
+
+  // 1) 原文逐字命中：说明差异在缩进以外的首行，给出实际那一行
+  let hit = lines.findIndex((line) => line === firstRaw)
+  if (hit >= 0) {
+    return `${tail}文件第 ${hit + 1} 行的原文与 old_string 首行逐字相同，`
+      + '但后续行或行尾仍有差异 —— 建议改用更短、更独特的片段，或一次只改一行。'
+  }
+  // 2) 去缩进相同：缩进不一致，明确报告两边缩进
+  hit = lines.findIndex((line) => line.trim() === firstLine)
+  if (hit >= 0) {
+    const actual = lines[hit]
+    const actualLead = actual.length - actual.trimStart().length
+    return `${tail}文件第 ${hit + 1} 行内容相同但缩进不同：`
+      + `old_string 用了 ${wantLead} 个空格，原文是 ${actualLead} 个空格。`
+      + `实际为 \`${actual.slice(0, 120)}${actual.length > 120 ? '…' : ''}\`。`
+  }
+  // 3) 前缀近似（容忍全角/半角、标点差异）：取首行前 8 个"字母或汉字"字符，
+  //    跳过标点与空白 —— 否则 `：`↔`:` 这类差异会让 stem 本身就对不上。
+  const stem = (firstLine.match(/[\p{L}\p{N}]/gu) ?? []).slice(0, 8).join('')
+  if (stem.length >= 4) {
+    hit = lines.findIndex((line) => {
+      const words = (line.match(/[\p{L}\p{N}]/gu) ?? []).join('')
+      return words.includes(stem)
+    })
+    if (hit >= 0) {
+      const actual = lines[hit]
+      const actualLead = actual.length - actual.trimStart().length
+      return `${tail}文件第 ${hit + 1} 行有一行开头相近的内容（缩进 ${actualLead} 个空格）：`
+        + `\`${actual.slice(0, 120)}${actual.length > 120 ? '…' : ''}\`。`
+        + '差异多半在全角/半角标点或空白字符。'
+    }
+  }
+  return `${tail}（old_string 的首行在文件中没有相近内容，可能路径或文件选错了。）`
+}
+
+/**
  * 非 UTF-8 写回绕过了 fs 服务，这里手动兑现观测策略给出的写意图。
  * @param {object|undefined} intent - `fs/write-intent` 的返回值。
  * @param {object|undefined} info - 既有文件信息。
@@ -558,9 +612,13 @@ function editTextDefinition(ctx) {
         ? decoded.text.split(oldString).length - 1
         : mixedPlan.occurrences
       if (occurrences === 0) {
+        // 诊断信息要能自我纠正：给出 old_string 首行在文件中的**近似**位置与差异提示，
+        // 而不是只丢一句"找不到"。名字用当前工具名 `read`（`read_text` 是旧名，
+        // 按旧名去调只会再失败一次）。
+        const hint = diagnoseMiss(decoded.text, stripBom(oldRaw))
         throw new Error(mixed
-          ? `在 "${opened.displayPath}" 中找不到 old_string（已按裸换行匹配；该文件是 CRLF/LF 混排，未改动任何行尾）。请先用 read_text 确认原文，注意行首缩进与全角/半角符号。`
-          : `在 "${opened.displayPath}" 中找不到 old_string（已按 ${eolLabel(eol)} 规范化换行）。请先用 read_text 确认原文，注意行首缩进与全角/半角符号。`)
+          ? `在 "${opened.displayPath}" 中找不到 old_string（已按裸换行匹配；该文件是 CRLF/LF 混排，未改动任何行尾）。${hint}`
+          : `在 "${opened.displayPath}" 中找不到 old_string（已按 ${eolLabel(eol)} 规范化换行）。${hint}`)
       }
       if (occurrences > 1 && !replaceAll) {
         throw new Error(`old_string 在 "${opened.displayPath}" 中出现 ${occurrences} 次，不唯一。请补足上下文使其唯一，或传 replace_all: true。`)
