@@ -166,6 +166,10 @@ export function apply(ctx, config) {
           newPreset: newPreset !== null && typeof newPreset === 'object' ? newPreset : {}
         })
           .then((result) => {
+            // 闸门裁剪必须先记：它解释了"能力关了、预设里的 tools 也跟着少了"这件事
+            for (const item of result.gateFixed ?? []) {
+              ctx.logger?.info(`agent-toolkit: 预设 ${item.preset} 的 ${item.removed.join(', ')} 已按设置页闸门自动移除`)
+            }
             if (result.changed) {
               ctx.logger?.info('agent-toolkit: 设置页同步完成 —— '
                 + `注入 ${result.injected.join(', ') || '（无）'}；`

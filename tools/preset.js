@@ -20,6 +20,7 @@ import { fileURLToPath } from 'node:url'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { buildEditOverrides, buildOverrides, readPresetDocument, takeoverShippedTools } from '../lib/preset-inject.js'
+import { reconcileEdits } from '../lib/gate-reconcile.js'
 import { createToolRegistrar } from './registry.js'
 
 /**
@@ -311,6 +312,22 @@ export async function syncFromSettings(ctx, wanted) {
     edits[id.trim()] = { capabilities, persona, suffix, complete }
   }
 
+  // 闸门对账：设置页关掉的能力，必须从每个预设行的能力表里同步去掉。
+  // 否则 `settingsGate()` 拦住了注册、预设声明却留着旧值 —— 配置与实际生效脱节，
+  // 只能靠人工去 YAML 里删（这正是此前发生的事）。
+  //
+  // 传 undefined 表示"不设闸门"：与 settingsGate() 一致 —— 一个都没勾等于没配置过，
+  // 此时不能把预设的能力表清空。
+  const gate = enabled.length === 0 ? undefined : enabled
+  const managed = [...new Set([
+    ...Object.keys(edits),
+    ...(state.presets ?? []).map((p) => p.id),
+    ...(state.inject ?? []).map((i) => i.preset)
+  ])].filter((id) => typeof id === 'string' && id !== '')
+  const reconciled = reconcileEdits(edits, gate, managed)
+  const gateFixed = reconciled.fixed
+  Object.assign(edits, reconciled.edits)
+
   const manual = (state.inject ?? []).filter((item) => item.source !== 'settings')
   const synced = enabled.length === 0 ? [] : ids.map((id) => ({ preset: id, capabilities: enabled, source: 'settings' }))
   const nextInject = [...manual, ...synced]
@@ -344,10 +361,10 @@ export async function syncFromSettings(ctx, wanted) {
     && JSON.stringify(state.inject ?? []) === JSON.stringify(nextInject)
     && JSON.stringify(state.edits ?? {}) === JSON.stringify(edits)
   if (same) {
-    return { changed: false, injected: nextInject.map((item) => item.preset), edited: Object.keys(edits), created: [] }
+    return { changed: false, injected: nextInject.map((item) => item.preset), edited: Object.keys(edits), created: [], gateFixed }
   }
   await writeState(ctx, exec, { presets, inject: nextInject, edits })
-  return { changed: true, injected: nextInject.map((item) => item.preset), edited: Object.keys(edits), created }
+  return { changed: true, injected: nextInject.map((item) => item.preset), edited: Object.keys(edits), created, gateFixed }
 }
 
 /**
