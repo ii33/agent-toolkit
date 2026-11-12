@@ -265,7 +265,7 @@ function envSetupDefinition(ctx) {
         '## 给接手者的说明',
         '- 命令一律走 run（argv，无 shell）或 sh（bash，非 PowerShell）。',
         `- pip 已配置镜像；装包请用上面的解释器：\`${python ?? '<python>'} -m pip install <包>\`（PATH 上的 pip 可能属于另一份 python）。`,
-        '- 读写文件用 read_text / write_text / edit_text（自动处理编码与换行）。'
+        '- 读写文件用 read / read_many / write / edit（自动处理编码与换行）。'
       ].filter((line) => line !== undefined)
       const text = `${lines.join('\n')}\n`
 

@@ -23,7 +23,7 @@ function sftpHostsDefinition(ctx) {
   return {
     name: 'sftp_hosts',
     description: '管理远程 SFTP 主机代号；代号可直接写在路径里（形如 `代号:/远程/路径`），'
-      + 'read_text / write_text / edit_text / list_dir / read_image 都支持。'
+      + 'read / read_many / write / edit / list_dir / read_image 都支持。'
       + 'action：list 列出代号与连接状态；add 写入一台主机（用 password_env 指定环境变量名，不要给明文密码）；'
       + 'remove 删除；ping 真实连接以验证凭据；close 断开常驻连接。',
     parameters: {

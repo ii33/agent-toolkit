@@ -172,6 +172,25 @@ function makeCollector({ offset, limit }) {
  * @param {string} replacement - 替换串。
  * @returns {string} 结果。
  */
+function binaryReadError(displayPath) {
+  // 只说"只处理文本"没有出路：模型还得自己猜下一步。按扩展名给出具体工具，
+  // 图片指向 read_image，其它指向 shell 里的文件读取或专用工具。
+  const lower = String(displayPath).toLowerCase()
+  const ext = /\.([a-z0-9]+)$/u.exec(lower)?.[1] ?? ''
+  const IMAGE = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'tiff', 'ico'])
+  const hint = IMAGE.has(ext)
+    ? '图片请用 read_image 直接交给模型查看；需要尺寸等元信息用 image_info。'
+    : '这不是文本文件：请在 shell 里用相应工具处理（如 file、head -c、xxd），或改用专用的读写工具。'
+  return new Error(`无法读取 "${displayPath}"：看起来是二进制文件（含 NUL 字节），\`read\` 只处理文本。${hint}`)
+}
+
+/**
+ * 只替换第一处出现。
+ * @param {string} text - 原文。
+ * @param {string} search - 查找串。
+ * @param {string} replacement - 替换串。
+ * @returns {string} 结果。
+ */
 function replaceFirst(text, search, replacement) {
   const index = text.indexOf(search)
   if (index === -1) return text
@@ -347,7 +366,7 @@ function readTextDefinition(ctx) {
         }
         const bytes = await remoteReadBytes(ctx, exec, opened.remote, MAX_REMOTE_BYTES)
         if (bom === false && looksBinary(bytes)) {
-          throw new Error(`无法读取 "${opened.displayPath}"：看起来是二进制文件（含 NUL 字节），read_text 只处理文本`)
+          throw binaryReadError(opened.displayPath)
         }
         const decoded = decodeText(bytes)
         lossy = decoded.lossy
@@ -359,14 +378,14 @@ function readTextDefinition(ctx) {
         }
         const bytes = await ctx.fs.readBytes(opened.target, exec.signal, MAX_IN_MEMORY_BYTES)
         if (bom === false && looksBinary(bytes)) {
-          throw new Error(`无法读取 "${opened.displayPath}"：看起来是二进制文件（含 NUL 字节），read_text 只处理文本`)
+          throw binaryReadError(opened.displayPath)
         }
         const decoded = decodeText(bytes)
         lossy = decoded.lossy
         collector.feed(decoded.text)
       } else {
         if (bom === false && looksBinary(head)) {
-          throw new Error(`无法读取 "${opened.displayPath}"：看起来是二进制文件（含 NUL 字节），read_text 只处理文本`)
+          throw binaryReadError(opened.displayPath)
         }
         const size = opened.info.size
         const stream = size === undefined || size >= STREAM_MIN_SIZE
