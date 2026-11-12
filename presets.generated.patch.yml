@@ -60,32 +60,14 @@
           watch: true
       - id: tool-skill
         name: '@deepseek-ai/dsh-tool-skill'
-      - id: delegation
-        name: cordis:group
-        group: true
-        isolate:
-          workflowEngine: true
-        config:
-          - id: tool-subagent-control
-            name: '@deepseek-ai/dsh-tool-subagent-control'
-          - id: tool-subagent
-            name: '@deepseek-ai/dsh-tool-subagent'
-            config:
-              provider: spawn
-              toolName: subagent
-              modelSelection: true
-              modelDiscovery: true
-          - id: tool-subagent-fork
-            name: '@deepseek-ai/dsh-tool-subagent'
-            config:
-              provider: fork
-              toolName: subagent_fork
-          - id: workflow-ptc
-            name: '@deepseek-ai/dsh-workflow-ptc'
-            config:
-              provider: spawn
-          - id: tool-workflow
-            name: '@deepseek-ai/dsh-tool-workflow'
+      # 委派与编排（subagent / subagent_fork / workflow / list_agents）**不在这里挂**：
+      # 0.2.2-rc.2 的 dsh-base 已在全局提供 tool-subagent-control / tool-subagent /
+      # tool-subagent-fork / workflow-ptc / tool-workflow，以及 subagents 的 spawn / fork
+      # provider（subagent-spawn-in-process / subagent-fork-in-process）。
+      # 预设里再挂一份只会「scoped 遮蔽 global」——重复注册，且
+      # isolate: { workflowEngine: true } 会造出第二个 workflowEngine 实例。
+      # 需要改某个委派行（例如打开 modelSelection）时，请在本插件的
+      # cordis.patch.yml（profile 层）按 id 覆盖，那才是真覆盖。
       - id: planning
         name: cordis:group
         group: true
