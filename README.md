@@ -45,7 +45,7 @@ dsh plugin --profile <profile> install <路径或 tgz>
 | `doc` | 3 | `ocr_doc`（docling 包装）/ `merge_files`（按 manifest 合并）/ `pack`（tar 打包） |
 | `split` | 1 | `split_file`：大文件拆块 + manifest |
 | `img` | 4 | `read_image` 整图直投模型；`image_info` 看尺寸；`crop_image` 裁一块（默认直接给模型看）；`resize_image` 缩放（缺 Pillow 时按镜像自动装） |
-| `tasks` | 4 | `plan_init` / `task_update` / `task_show` / `stage_set`：进度写 `TASKS.md`，摘要注入上下文 |
+| `tasks` | 4 | `plan_init` / `task_update` / `task_show` / `stage_set`：进度写 `.dsh/tasks/<会话 id>.md`（**按会话隔离**，多会话并行不会互相覆盖），摘要注入上下文 |
 | `guard` | 0 | 结构性 shell 禁令：禁 `powershell` / `powershell_ise` / `cmd` / `cmd.exe` / `shell` / `bash` / `terminal*`，放行 `pwsh` / `sh` |
 | `preset` | 5 | `preset_create` / `preset_list` / `preset_delete` / `preset_inject` / `preset_eject` |
 

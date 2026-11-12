@@ -17,12 +17,29 @@ import { createToolRegistrar } from './registry.js'
 export const inject = ['tools', 'fs', 'systemPrompt']
 
 /**
- * 账本默认相对路径（相对会话工作目录）。
- * 放在工作区根目录是为了人和模型都容易看到；写入时父目录会自动创建
- * （本地 fs 后端在写前 `mkdir(dirname, {recursive:true})`），所以换成
- * 子目录路径（如 `out/TASKS.md`）同样可用。
+ * 账本的默认相对路径（相对会话工作目录）。
+ *
+ * **必须按会话隔离**：固定写成 `TASKS.md` 时，同一工作目录下的所有会话共用同一个文件，
+ * 多个会话并行会把彼此的目标/阶段/任务互相覆盖 —— 表现为"每个会话最后都变成同一个会话"。
+ * 现在默认落到 `.dsh/tasks/<sessionId>.md`：
+ *   - 同一会话跨轮次、跨重启仍是同一个文件（sessionId 稳定）；
+ *   - 不同会话互不干扰；
+ *   - 仍在工作区内，人能直接看到（`.dsh/` 是 DSH 自己的目录）。
+ *
+ * 拿不到 sessionId 时（极少数无 agent 的调用）退回工作区根的 `TASKS.md`。
  */
-const DEFAULT_LEDGER = 'TASKS.md'
+const LEDGER_DIR = '.dsh/tasks'
+
+/**
+ * 本会话的默认账本相对路径。
+ * @param {object} exec - 工具执行上下文。
+ * @returns {string} 相对会话工作目录的账本路径。
+ */
+export function defaultLedgerPath(exec) {
+  const id = exec?.agent?.session?.id
+  if (typeof id === 'string' && id !== '') return `${LEDGER_DIR}/${id}.md`
+  return 'TASKS.md'
+}
 
 /** 注入面板的字符上限，避免吃掉宝贵的上下文。 */
 const PANEL_MAX_CHARS = 700
@@ -163,7 +180,7 @@ async function writeLedger(ctx, exec, target, ledger, relPath) {
  */
 function ledgerPathFor(exec) {
   const known = exec.agent === undefined ? undefined : agents.get(exec.agent)
-  return known?.relPath ?? DEFAULT_LEDGER
+  return known?.relPath ?? defaultLedgerPath(exec)
 }
 
 /**
@@ -182,7 +199,7 @@ function planInitDefinition(ctx) {
         goal: { type: 'string', description: '本次工作的总目标，一句话。' },
         tasks: { type: 'array', items: { type: 'string' }, description: '任务清单，按执行顺序排列，每条一句话。' },
         stage: { type: 'string', description: '当前阶段标签，如 `2/4 OCR+翻译`。省略则按 `1/N 第一条` 生成。' },
-        path: { type: 'string', description: `账本文件路径（所在目录必须已存在）。默认 ${DEFAULT_LEDGER}。` }
+        path: { type: 'string', description: `账本文件路径（所在目录必须已存在）。默认按会话隔离：.dsh/tasks/<会话 id>.md。` }
       },
       required: ['goal', 'tasks']
     },
@@ -203,7 +220,7 @@ function planInitDefinition(ctx) {
       const goal = requireString(args?.goal, 'goal')
       if (!Array.isArray(args?.tasks) || args.tasks.length === 0) throw new Error('tasks 必须是非空字符串数组')
       const texts = args.tasks.map((item, index) => requireString(item, `tasks[${index}]`))
-      const relPath = typeof args?.path === 'string' && args.path.trim() !== '' ? args.path : DEFAULT_LEDGER
+      const relPath = typeof args?.path === 'string' && args.path.trim() !== '' ? args.path : defaultLedgerPath(exec)
       const stage = typeof args?.stage === 'string' && args.stage.trim() !== '' ? args.stage.trim() : `1/${texts.length} ${texts[0]}`
       const ledger = {
         goal,
@@ -397,10 +414,11 @@ export function apply(ctx) {
   // 会话建立时把工作区里已有的账本读进来；失败不影响会话创建。
   ctx.on('agent/created', async ({ agent, signal }) => {
     try {
-      const { ledger, exists } = await readLedger(ctx, { agent, signal }, DEFAULT_LEDGER)
-      agents.set(agent, { relPath: DEFAULT_LEDGER, panel: exists ? buildPanel(ledger, DEFAULT_LEDGER) : '' })
+      const relPath = defaultLedgerPath({ agent })
+      const { ledger, exists } = await readLedger(ctx, { agent, signal }, relPath)
+      agents.set(agent, { relPath, panel: exists ? buildPanel(ledger, relPath) : '' })
     } catch {
-      agents.set(agent, { relPath: DEFAULT_LEDGER, panel: '' })
+      agents.set(agent, { relPath: defaultLedgerPath({ agent }), panel: '' })
     }
   })
 }
