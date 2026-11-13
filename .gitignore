@@ -19,3 +19,6 @@ Thumbs.db
 *.db
 *.db-wal
 *.db-shm
+
+# 生效快照（运行时观测产物，每次 apply 重建）
+effective.json
