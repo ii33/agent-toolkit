@@ -151,4 +151,54 @@ check('没有 jobs 服务时返回 undefined（调用方退回同步执行）', 
   assert.equal(job, undefined)
 })
 
+console.log('\n候选工具都暴露 run_in_background')
+
+check('sh / pwsh / run 的参数表里都有 run_in_background', async () => {
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  process.env.DSH_AGENTKIT_STATE_DIR = mkdtempSync(join(tmpdir(), 'agentkit-jbg-'))
+
+  const { apply } = await import('../index.js')
+  for (const capability of ['sh', 'pwsh', 'run']) {
+    const tools = []
+    apply({
+      logger,
+      tools: { get: () => undefined, register: (d) => { tools.push(d); return () => {} } },
+      systemPrompt: { context() {}, section() {} },
+      on: () => () => {},
+      effect: (fn) => { fn(); return () => {} },
+      get: () => undefined,
+      waterfall: async () => undefined,
+      emit() {}
+    }, { tools: [capability] })
+    const tool = tools.find((t) => t.name === capability)
+    assert.ok(tool, `${capability} 应注册`)
+    assert.ok(tool.parameters.properties.run_in_background !== undefined,
+      `${capability} 必须有 run_in_background 参数（与宿主约定同名）`)
+  }
+})
+
+check('后台模式下退出码不是必填（进程还在跑）', async () => {
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  process.env.DSH_AGENTKIT_STATE_DIR = mkdtempSync(join(tmpdir(), 'agentkit-jbg2-'))
+  const { apply } = await import('../index.js')
+  const tools = []
+  apply({
+    logger,
+    tools: { get: () => undefined, register: (d) => { tools.push(d); return () => {} } },
+    systemPrompt: { context() {}, section() {} },
+    on: () => () => {},
+    effect: (fn) => { fn(); return () => {} },
+    get: () => undefined,
+    waterfall: async () => undefined,
+    emit() {}
+  }, { tools: ['sh'] })
+  const sh = tools.find((t) => t.name === 'sh')
+  assert.ok(!sh.output.schema.required.includes('exit_code'), '后台模式没有 exit_code，不能列为必填')
+  assert.ok(sh.output.schema.properties.job_id !== undefined, '要能返回 job_id')
+})
+
 console.log(`\n${passed} 项通过`)

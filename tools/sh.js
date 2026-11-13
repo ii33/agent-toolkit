@@ -71,7 +71,7 @@ function shDefinition(ctx) {
         },
         cwd: { type: 'string', description: '工作目录（宿主路径）；相对路径按当前会话工作目录解析（Windows 上也接受 `/c/...` 形式），必须存在且是目录；省略则用当前会话工作目录。' },
         timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。要跑更久请用 background: true。` },
-        background: {
+        run_in_background: {
           type: 'boolean',
           description: '不阻塞会话：命令转成后台作业立即返回作业 id（不用等它跑完）。'
             + '拿到 id 后用 job_output 增量读输出、job_list 看状态、job_kill 终止。'
@@ -86,7 +86,7 @@ function shDefinition(ctx) {
         additionalProperties: false,
         properties: {
           command: { type: 'string' },
-          // background: true 时没有退出码（进程还在跑），所以不列入 required
+          // run_in_background: true 时没有退出码（进程还在跑），所以不列入 required
           exit_code: { type: 'integer' },
           signal: { type: 'string' },
           duration_ms: { type: 'integer' },
@@ -119,7 +119,7 @@ function shDefinition(ctx) {
       const timeoutMs = args?.timeout_ms === undefined ? DEFAULT_TIMEOUT_MS : Number(args.timeout_ms)
       const bash = await resolveBash(ctx, exec)
       // 后台模式：启动后立刻返回，不阻塞会话
-      if (args?.background === true) {
+      if (args?.run_in_background === true) {
         const job = startAsJob(ctx, exec, {
           label: command.length > 120 ? `${command.slice(0, 120)}…` : command,
           run: (emit) => execStreaming(ctx, exec, { argv: [bash, '-c', command], cwd, onOutput: emit })

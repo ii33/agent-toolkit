@@ -15,7 +15,8 @@
  */
 import { accessSync, constants } from 'node:fs'
 import { delimiter, dirname, join } from 'node:path'
-import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture } from '../lib/exec.js'
+import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture, execStreaming } from '../lib/exec.js'
+import { startAsJob } from '../lib/job-adopt.js'
 import { assertRemoteShellAllowed } from '../lib/shell-ban.js'
 import { cwdFor, requireString } from '../lib/fs-common.js'
 import { resolveCallCwd } from './cwd-arg.js'
@@ -147,7 +148,13 @@ function pwshDefinition(ctx) {
       properties: {
         script: { type: 'string', description: '要执行的 PowerShell 脚本（不需要外层引号转义）。' },
         cwd: { type: 'string', description: '工作目录（宿主路径）；相对路径按当前会话工作目录解析（Windows 上也接受 `/c/...` 形式），必须存在且是目录；省略则用当前会话工作目录。' },
-        timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。超过 ${MAX_TIMEOUT_MS / 60000} 分钟的任务请用后台任务（job_*）或拆成多步。` }
+        timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。要跑更久请用 run_in_background: true。` },
+        run_in_background: {
+          type: 'boolean',
+          description: '不阻塞会话：脚本转成后台作业立即返回作业 id（不用等它跑完）。'
+            + '拿到 id 后用 job_output 增量读输出、job_list 看状态、job_kill 终止。'
+            + '适合长时间构建、批量处理等明知很慢的操作。默认 false（同步等结果）。'
+        }
       },
       required: ['script']
     },
@@ -157,18 +164,29 @@ function pwshDefinition(ctx) {
         additionalProperties: false,
         properties: {
           script: { type: 'string' },
+          // run_in_background: true 时进程还在跑，没有退出码
           exit_code: { type: 'integer' },
           duration_ms: { type: 'integer' },
           timed_out: { type: 'boolean' },
           truncated: { type: 'boolean' },
+          job_id: { type: 'string', description: '仅后台模式：用 job_output / job_kill 操作这个作业' },
+          background: { type: 'boolean' },
           output: { type: 'string' }
         },
-        required: ['script', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'output']
+        required: ['script', 'duration_ms', 'timed_out', 'truncated', 'output']
       },
-      render: (_args, value) => [{
-        type: 'text',
-        text: `<pwsh exit="${value.exit_code}"${value.timed_out ? ' timed-out="true"' : ''} ms="${value.duration_ms}"/>\n${value.output === '' ? '(无输出)' : value.output}`
-      }]
+      render: (_args, value) => {
+        if (value.background === true) {
+          return [{
+            type: 'text',
+            text: `<pwsh background job="${value.job_id}"/>\n已在后台运行：${value.output}\n用 job_output（传 job_id: "${value.job_id}"）增量读输出。`
+          }]
+        }
+        return [{
+          type: 'text',
+          text: `<pwsh exit="${value.exit_code}"${value.timed_out ? ' timed-out="true"' : ''} ms="${value.duration_ms}"/>\n${value.output === '' ? '(无输出)' : value.output}`
+        }]
+      }
     },
     async execute(args, exec) {
       const script = requireString(args?.script, 'script')
@@ -177,11 +195,36 @@ function pwshDefinition(ctx) {
       // 远程主机同样禁 powershell 5.1 / cmd（本工具是 pwsh 7，但脚本里可能去调 ssh + cmd）
       assertRemoteShellAllowed(script, 'pwsh')
       const pwsh = await resolvePwsh(ctx, exec)
+      const extraEnv = { POWERSHELL_TELEMETRY_OPTOUT: '1', POWERSHELL_UPDATECHECK: 'Off' }
+      // 后台模式：启动后立刻返回，不阻塞会话
+      if (args?.run_in_background === true) {
+        const job = startAsJob(ctx, exec, {
+          label: script.length > 120 ? `${script.slice(0, 120)}…` : script,
+          run: (emit) => execStreaming(ctx, exec, {
+            argv: [pwsh, '-NoProfile', '-NonInteractive', '-Command', `${PREAMBLE}${script}`],
+            cwd,
+            env: extraEnv,
+            onOutput: emit
+          })
+        })
+        if (job !== undefined) {
+          return {
+            script: script.length > 200 ? `${script.slice(0, 200)}…` : script,
+            background: true,
+            job_id: job.id,
+            duration_ms: 0,
+            timed_out: false,
+            truncated: false,
+            output: script.length > 200 ? `${script.slice(0, 200)}…` : script
+          }
+        }
+        // 没有 jobs 服务就退回同步执行，功能不缺失
+      }
       const result = await execCapture(ctx, exec, {
         argv: [pwsh, '-NoProfile', '-NonInteractive', '-Command', `${PREAMBLE}${script}`],
         cwd,
         timeoutMs,
-        env: { POWERSHELL_TELEMETRY_OPTOUT: '1', POWERSHELL_UPDATECHECK: 'Off' }
+        env: extraEnv
       })
       return {
         script: script.length > 200 ? `${script.slice(0, 200)}…` : script,

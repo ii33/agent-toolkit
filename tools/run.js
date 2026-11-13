@@ -10,7 +10,8 @@
  *
  * @module @local/dsh-doc-pipeline/run
  */
-import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture } from '../lib/exec.js'
+import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture, execStreaming } from '../lib/exec.js'
+import { startAsJob } from '../lib/job-adopt.js'
 import { assertRemoteShellAllowed } from '../lib/shell-ban.js'
 import { requireString } from '../lib/fs-common.js'
 import { resolveCallCwd } from './cwd-arg.js'
@@ -62,7 +63,13 @@ function runDefinition(ctx) {
         program: { type: 'string', description: '程序名或绝对路径，如 `python`、`docling`、`tar`、`pandoc`。' },
         args: { type: 'array', items: { type: 'string' }, description: '参数数组，逐项传入，不需要任何引号或转义。' },
         cwd: { type: 'string', description: '工作目录；相对路径按当前会话工作目录解析（Windows 上也接受 `/c/...` 形式），必须存在且是目录；省略则用当前会话工作目录。' },
-        timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。超过 ${MAX_TIMEOUT_MS / 60000} 分钟的任务请用后台任务（job_*）或拆成多步。` }
+        timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。要跑更久请用 run_in_background: true。` },
+        run_in_background: {
+          type: 'boolean',
+          description: '不阻塞会话：程序转成后台作业立即返回作业 id（不用等它跑完）。'
+            + '拿到 id 后用 job_output 增量读输出、job_list 看状态、job_kill 终止。'
+            + '适合训练、全量转码、大批量处理等明知很慢的操作。默认 false（同步等结果）。'
+        }
       },
       required: ['program']
     },
@@ -72,19 +79,30 @@ function runDefinition(ctx) {
         additionalProperties: false,
         properties: {
           program: { type: 'string' },
+          // run_in_background: true 时进程还在跑，没有退出码
           exit_code: { type: 'integer' },
           signal: { type: 'string' },
           duration_ms: { type: 'integer' },
           timed_out: { type: 'boolean' },
           truncated: { type: 'boolean' },
+          job_id: { type: 'string', description: '仅后台模式：用 job_output / job_kill 操作这个作业' },
+          background: { type: 'boolean' },
           output: { type: 'string' }
         },
-        required: ['program', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'output']
+        required: ['program', 'duration_ms', 'timed_out', 'truncated', 'output']
       },
-      render: (_args, value) => [{
-        type: 'text',
-        text: `<run program="${value.program}" exit="${value.exit_code}"${value.signal === undefined ? '' : ` signal="${value.signal}"`}${value.timed_out ? ' timed-out="true"' : ''} ms="${value.duration_ms}"/>\n${value.output === '' ? '(无输出)' : value.output}`
-      }]
+      render: (_args, value) => {
+        if (value.background === true) {
+          return [{
+            type: 'text',
+            text: `<run program="${value.program}" background job="${value.job_id}"/>\n已在后台运行：${value.output}\n用 job_output（传 job_id: "${value.job_id}"）增量读输出。`
+          }]
+        }
+        return [{
+          type: 'text',
+          text: `<run program="${value.program}" exit="${value.exit_code}"${value.signal === undefined ? '' : ` signal="${value.signal}"`}${value.timed_out ? ' timed-out="true"' : ''} ms="${value.duration_ms}"/>\n${value.output === '' ? '(无输出)' : value.output}`
+        }]
+      }
     },
     async execute(args, exec) {
       const program = requireString(args?.program, 'program')
@@ -114,6 +132,28 @@ function runDefinition(ctx) {
       const subprocess = ctx.get('subprocess')
       if (subprocess === undefined) throw new Error('run 需要 subprocess 服务，但当前组合没有挂载它')
       const executable = await subprocess.resolveExecutable(program, undefined, exec.signal)
+
+      // 后台模式：启动后立刻返回，不阻塞会话（审批已在上面完成）
+      if (args?.run_in_background === true) {
+        const label = `${program} ${argv.join(' ')}`.slice(0, 120)
+        const job = startAsJob(ctx, exec, {
+          label,
+          run: (emit) => execStreaming(ctx, exec, { argv: [executable, ...argv], cwd, onOutput: emit })
+        })
+        if (job !== undefined) {
+          return {
+            program,
+            background: true,
+            job_id: job.id,
+            duration_ms: 0,
+            timed_out: false,
+            truncated: false,
+            output: label
+          }
+        }
+        // 没有 jobs 服务就退回同步执行，功能不缺失
+      }
+
       const result = await execCapture(ctx, exec, { argv: [executable, ...argv], cwd, timeoutMs })
       return {
         program,
