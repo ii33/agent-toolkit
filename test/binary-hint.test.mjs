@@ -15,6 +15,13 @@ function check(name, fn) {
 }
 
 // binaryReadError 未导出（内部实现），这里通过其行为契约验证：用 read 工具实测。
+// 这个测试会调用 apply()，它会写 effective.json —— 必须先把状态目录指到临时目录，
+// 否则会把仓库里真实的生效快照覆盖成测试用的能力组合。
+const { mkdtempSync } = await import('node:fs')
+const { tmpdir } = await import('node:os')
+const { join } = await import('node:path')
+process.env.DSH_AGENTKIT_STATE_DIR = mkdtempSync(join(tmpdir(), 'agentkit-binhint-'))
+
 const { createRequire } = await import('node:module')
 const requireProfile = createRequire('C:\\Users\\youai\\.dsh\\profiles\\desktop\\package.json')
 const mod = await import(`file:///${requireProfile.resolve('@local/dsh-agentkit').replace(/\\/g, '/')}`)

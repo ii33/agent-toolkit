@@ -10,9 +10,19 @@
  * 运行：node test/load.test.mjs
  */
 import assert from 'node:assert/strict'
-import { shippedGenericCapabilities } from './deps.mjs'
-import { apply } from '../index.js'
-import { BANNED_TOOL_NAMES, denyReasonFor } from '../tools/guard.js'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
+// **必须在 import 插件模块之前**把状态目录指到临时目录：
+// apply() 会写 effective.json（生效快照），不隔离就会把仓库里真实的快照
+// 覆盖成测试用的能力组合（实测发生过：真实快照变成了 enabled:['fs']）。
+// 注意 ESM 的 import 会被提升，所以这里用动态 import 保证顺序。
+process.env.DSH_AGENTKIT_STATE_DIR = mkdtempSync(join(tmpdir(), 'agentkit-load-'))
+
+const { shippedGenericCapabilities } = await import('./deps.mjs')
+const { apply } = await import('../index.js')
+const { BANNED_TOOL_NAMES, denyReasonFor } = await import('../tools/guard.js')
 
 /** harness 支持的 schema 子集（dsh-tools 的 JsonSchemaNode）。 */
 const ALLOWED_KEYS = new Set([
