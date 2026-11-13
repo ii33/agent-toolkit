@@ -115,6 +115,11 @@ node test/eol-mixed.test.mjs        # 混合行尾编辑：只替换命中区间
 node test/tooling-ergonomics.test.mjs  # read 默认无行号 / edit 放宽观测 / 能力清单上下文
 node test/gate-reconcile.test.mjs   # 设置页关能力后自动裁剪预设能力表
 node test/tasks-isolation.test.mjs  # 账本按会话隔离
+node test/tool-lifecycle.test.mjs   # 工具注册生命周期：卸载后能重新注册（修「能删不能加」）
+node test/edit-diagnose.test.mjs    # edit 未命中的诊断（缩进/全角/近似行号）
+node test/binary-hint.test.mjs      # 读二进制时引导到 read_image 等正确工具
+node test/effective-snapshot.test.mjs  # 生效快照：on 与 active 并排，暴露「开了没生效」
+node test/settings-layout.test.mjs  # 设置页真实渲染：高级项默认折叠
 node test/measure-capabilities.mjs  # 各能力的 token 成本
 node test/measure.mjs <会话日志>     # 各 preset 的系统提示词 + 工具 schema 占用（需要一份会话日志路径）
 ```
@@ -135,7 +140,19 @@ MSYS2 / Cygwin 的 python 用 posixpath，`D:\...` 形式的绝对路径会被�
 
 ## 兼容性
 
-适配目标：**DSH Desktop 0.2.2-rc.2**（schemastery 3.19.0 / cordis 4.1.0 / react 18）。
+适配目标：**DSH Desktop 0.2.2-rc.3**（schemastery 3.19.0 / cordis 4.1.0 / react 18）。
+0.2.2-rc.2 同样适用：两者的 `dsh-base` 补丁逐行相同。
+
+相对 1.7.0 的适配点：
+
+- **工具注册生命周期归位**：`ctx.tools.register()` 的 disposer 此前被丢弃，工具永不卸载
+  （表现为「关能力删不掉、重开加不回来」）。现在注册器自动登记到 `ctx.effect`。
+- **委派组加回预设**：`dsh-base` 的全局委派行在预设作用域内并不真正提供工具，
+  必须在本预设内挂载，否则新会话缺 `subagent / subagent_fork / workflow`。
+- **生效快照**：`effective.json` 并排记录 `on`（闸门）与 `active`（实际注册），
+  让「打开了但没生效」一眼可见。该文件是运行时产物，不进版本库。
+- **描述与实测一致**：能力清单限定作用域、新增「描述与实测不一致要报」的纪律条款、
+  二进制/未命中诊断给出可执行的下一步。
 
 相对 1.6.0 的适配点（0.2.2-rc.1 → 0.2.2-rc.2）：
 
