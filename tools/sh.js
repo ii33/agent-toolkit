@@ -10,7 +10,8 @@
  *
  * @module @local/dsh-doc-pipeline/sh
  */
-import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture } from '../lib/exec.js'
+import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture, execStreaming } from '../lib/exec.js'
+import { startAsJob } from '../lib/job-adopt.js'
 import { assertRemoteShellAllowed } from '../lib/shell-ban.js'
 import { requireString } from '../lib/fs-common.js'
 import { resolveCallCwd } from './cwd-arg.js'
@@ -69,7 +70,13 @@ function shDefinition(ctx) {
             + '这里留给管道串联、通配与调用程序。'
         },
         cwd: { type: 'string', description: '工作目录（宿主路径）；相对路径按当前会话工作目录解析（Windows 上也接受 `/c/...` 形式），必须存在且是目录；省略则用当前会话工作目录。' },
-        timeout_ms: { type: 'number', description: `超时毫秒数，默认 ${DEFAULT_TIMEOUT_MS}，上限 ${MAX_TIMEOUT_MS}。` }
+        timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。要跑更久请用 background: true。` },
+        background: {
+          type: 'boolean',
+          description: '不阻塞会话：命令转成后台作业立即返回作业 id（不用等它跑完）。'
+            + '拿到 id 后用 job_output 增量读输出、job_list 看状态、job_kill 终止。'
+            + '适合训练、全量构建、大批量转换等明知很慢的命令。默认 false（同步等结果）。'
+        }
       },
       required: ['command']
     },
@@ -79,19 +86,30 @@ function shDefinition(ctx) {
         additionalProperties: false,
         properties: {
           command: { type: 'string' },
+          // background: true 时没有退出码（进程还在跑），所以不列入 required
           exit_code: { type: 'integer' },
           signal: { type: 'string' },
           duration_ms: { type: 'integer' },
           timed_out: { type: 'boolean' },
           truncated: { type: 'boolean' },
+          job_id: { type: 'string', description: '仅后台模式：用 job_output / job_kill 操作这个作业' },
+          background: { type: 'boolean' },
           output: { type: 'string' }
         },
-        required: ['command', 'exit_code', 'duration_ms', 'timed_out', 'truncated', 'output']
+        required: ['command', 'duration_ms', 'timed_out', 'truncated', 'output']
       },
-      render: (_args, value) => [{
-        type: 'text',
-        text: `<bash exit="${value.exit_code}"${value.signal === undefined ? '' : ` signal="${value.signal}"`}${value.timed_out ? ' timed-out="true"' : ''} ms="${value.duration_ms}"/>\n${value.output === '' ? '(无输出)' : value.output}`
-      }]
+      render: (_args, value) => {
+        if (value.background === true) {
+          return [{
+            type: 'text',
+            text: `<bash background job="${value.job_id}"/>\n已在后台运行：${value.output}\n用 job_output（传 job_id: "${value.job_id}"）增量读输出。`
+          }]
+        }
+        return [{
+          type: 'text',
+          text: `<bash exit="${value.exit_code}"${value.signal === undefined ? '' : ` signal="${value.signal}"`}${value.timed_out ? ' timed-out="true"' : ''} ms="${value.duration_ms}"/>\n${value.output === '' ? '(无输出)' : value.output}`
+        }]
+      }
     },
     async execute(args, exec) {
       const command = requireString(args?.command, 'command')
@@ -100,6 +118,25 @@ function shDefinition(ctx) {
       const cwd = resolveCallCwd(ctx, exec, args?.cwd)
       const timeoutMs = args?.timeout_ms === undefined ? DEFAULT_TIMEOUT_MS : Number(args.timeout_ms)
       const bash = await resolveBash(ctx, exec)
+      // 后台模式：启动后立刻返回，不阻塞会话
+      if (args?.background === true) {
+        const job = startAsJob(ctx, exec, {
+          label: command.length > 120 ? `${command.slice(0, 120)}…` : command,
+          run: (emit) => execStreaming(ctx, exec, { argv: [bash, '-c', command], cwd, onOutput: emit })
+        })
+        if (job !== undefined) {
+          return {
+            command: command.length > 200 ? `${command.slice(0, 200)}…` : command,
+            background: true,
+            job_id: job.id,
+            duration_ms: 0,
+            timed_out: false,
+            truncated: false,
+            output: command
+          }
+        }
+        // 没有 jobs 服务就退回同步执行，不能让用户的功能凭空消失
+      }
       const result = await execCapture(ctx, exec, { argv: [bash, '-c', command], cwd, timeoutMs })
       return {
         command: command.length > 200 ? `${command.slice(0, 200)}…` : command,

@@ -147,7 +147,7 @@ function pwshDefinition(ctx) {
       properties: {
         script: { type: 'string', description: '要执行的 PowerShell 脚本（不需要外层引号转义）。' },
         cwd: { type: 'string', description: '工作目录（宿主路径）；相对路径按当前会话工作目录解析（Windows 上也接受 `/c/...` 形式），必须存在且是目录；省略则用当前会话工作目录。' },
-        timeout_ms: { type: 'number', description: `超时毫秒数，默认 ${DEFAULT_TIMEOUT_MS}，上限 ${MAX_TIMEOUT_MS}。` }
+        timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。超过 ${MAX_TIMEOUT_MS / 60000} 分钟的任务请用后台任务（job_*）或拆成多步。` }
       },
       required: ['script']
     },

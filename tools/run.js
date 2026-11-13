@@ -62,7 +62,7 @@ function runDefinition(ctx) {
         program: { type: 'string', description: '程序名或绝对路径，如 `python`、`docling`、`tar`、`pandoc`。' },
         args: { type: 'array', items: { type: 'string' }, description: '参数数组，逐项传入，不需要任何引号或转义。' },
         cwd: { type: 'string', description: '工作目录；相对路径按当前会话工作目录解析（Windows 上也接受 `/c/...` 形式），必须存在且是目录；省略则用当前会话工作目录。' },
-        timeout_ms: { type: 'number', description: `超时毫秒数，默认 ${DEFAULT_TIMEOUT_MS}，上限 ${MAX_TIMEOUT_MS}。` }
+        timeout_ms: { type: 'number', description: `超时毫秒数。默认 ${DEFAULT_TIMEOUT_MS / 1000} 秒，**最大 ${MAX_TIMEOUT_MS / 1000} 秒（${MAX_TIMEOUT_MS / 60000} 分钟）**，超过会被拒绝。超过 ${MAX_TIMEOUT_MS / 60000} 分钟的任务请用后台任务（job_*）或拆成多步。` }
       },
       required: ['program']
     },
