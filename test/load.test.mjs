@@ -204,7 +204,7 @@ check('仅 guard 时仍注册清单上下文（承载纪律条款）', () => {
   apply(ctx, { tools: ['guard'] })
   const found = state.contexts.filter((entry) => entry.name === 'agentkit:capabilities')
   assert.equal(found.length, 1, '纪律条款必须始终出现，即使本插件没挂任何工具')
-  assert.match(found[0].text({ scope: {} }), /发现工具出错，及时提出/)
+  assert.match(found[0].text({ scope: {} }), /纪律：发现工具行为与描述不符/)
 })
 
 check('guard 能力注册 agent/created 监听', () => {
