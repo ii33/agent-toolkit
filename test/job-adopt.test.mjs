@@ -237,4 +237,28 @@ check('超时后转后台并**立刻返回**（不再等进程跑完）', async 
   assert.equal(specs[0].label, 'node.exe -e x')
 })
 
+check('后台任务不跟随 exec.signal（工具返回后继续跑）', async () => {
+  // 这是「后台跑不动」的根因：exec.signal 是**这一步工具调用**的信号，
+  // 工具一返回就被 abort，用来回收这一步的资源。后台进程若绑上它会被连带杀掉。
+  const { readFileSync } = await import('node:fs')
+  const source = readFileSync(new URL('../lib/exec.js', import.meta.url), 'utf8')
+  const start = source.indexOf('export async function execStreaming')
+  const end = source.indexOf('export async function execCapture')
+  assert.ok(start >= 0 && end > start, '两个函数都要存在')
+  const body = source.slice(start, end)
+  // 只看代码行，忽略注释
+  const code = body.split('\n').filter((l) => !l.trim().startsWith('//')).join('\n')
+  assert.ok(!/exec\.signal\?\.addEventListener/.test(code),
+    'execStreaming 不能监听 exec.signal，否则工具返回时后台进程会被杀掉')
+})
+
+check('同步模式仍跟随 exec.signal（调用方还在等，取消就该杀）', async () => {
+  const { readFileSync } = await import('node:fs')
+  const source = readFileSync(new URL('../lib/exec.js', import.meta.url), 'utf8')
+  const start = source.indexOf('export async function execCapture')
+  const body = source.slice(start)
+  assert.ok(/exec\.signal\?\.addEventListener/.test(body),
+    'execCapture 必须响应取消，否则同步调用无法中断')
+})
+
 console.log(`\n${passed} 项通过`)
