@@ -7,7 +7,7 @@
  *   2. 没挂 tool-jobs（无 controller）时要安静降级，不能抛 JOB_CONTROLLER_UNAVAILABLE。
  */
 import assert from 'node:assert/strict'
-import { adoptAsJob, jobControllerAvailable, startAsJob } from '../lib/job-adopt.js'
+import { adoptAsJob, jobControllerAvailable, jobOwnerId, startAsJob } from '../lib/job-adopt.js'
 
 let passed = 0
 function check(name, fn) {
@@ -38,8 +38,24 @@ function fakeJobs() {
 
 const exec = { agent: { id: 'a1' } }
 
-console.log('jobControllerAvailable')
+console.log('jobOwnerId')
 
+check('传 session id 字符串（jobs.start 要的形式）', () => {
+  // 实测：传 agent 对象会 JOB_OWNER_NOT_LIVE —— agents.get() 按 session id 索引
+  assert.equal(jobOwnerId({ agent: { id: 'session-abc', session: { id: 'session-abc' } } }), 'session-abc')
+})
+
+check('agent 没有 id 时退回 session.id', () => {
+  assert.equal(jobOwnerId({ agent: { session: { id: 'session-xyz' } } }), 'session-xyz')
+})
+
+check('拿不到 owner 时返回 undefined（作业变成无 owner，仍可运行）', () => {
+  assert.equal(jobOwnerId({}), undefined)
+  assert.equal(jobOwnerId({ agent: {} }), undefined)
+  assert.equal(jobOwnerId(undefined), undefined)
+})
+
+console.log('jobControllerAvailable')
 check('没有 jobs 服务 → false', () => {
   assert.equal(jobControllerAvailable({ get: () => undefined }, undefined), false)
 })
