@@ -83,4 +83,48 @@ check('拒绝文案按场景拆分：远程保留场景说明', () => {
   assert.match(remote, /pwsh/)
 })
 
+
+
+console.log('\n引号内的内容不算命令位置')
+
+check('字符串里的 `; cmd` 不误判（曾经的误报源头之一）', () => {
+  // 分割器按 ; & | 换行 切段，字符串里的分隔符会被当成命令边界
+  assert.equal(localShellBanReason('Write-Output "a; cmd /c b"'), undefined)
+  assert.equal(localShellBanReason("$x = 'cmd|powershell'"), undefined)
+})
+
+check('反引号字符串里的 cmd 不误判（PowerShell）', () => {
+  assert.equal(localShellBanReason('Write-Output `cmd`'), undefined)
+})
+
+check('注释与字符串常量里的 cmd 不误判', () => {
+  assert.equal(localShellBanReason('# 用 cmd 跑一下\nWrite-Output hi'), undefined)
+  assert.equal(localShellBanReason("$a = @('cmd','powershell')"), undefined)
+})
+
+check('引号外的真实命令位置仍然拦截', () => {
+  assert.equal(typeof localShellBanReason('cmd /c dir'), 'string')
+  assert.equal(typeof localShellBanReason('echo hi; cmd /c dir'), 'string')
+})
+
+console.log('\nassertRemoteShellAllowed 只做远程检查')
+
+check('pwsh 整段脚本不再走本地命令位置扫描', async () => {
+  // 这是核心修复：assertRemoteShellAllowed 早先是 assertShellAllowed 的别名，
+  // pwsh 把整段脚本传进来，于是注释/常量/正则里的 cmd 全被判违规。
+  const { assertRemoteShellAllowed } = await import('../lib/shell-ban.js')
+  const script = [
+    '# 用 cmd 跑（注释）',
+    '$re = "cmd|powershell"',
+    'Write-Output "a; cmd /c b"',
+    'Write-Output `cmd`'
+  ].join('\n')
+  assert.doesNotThrow(() => assertRemoteShellAllowed(script, 'pwsh'))
+})
+
+check('远程调用仍被拦截', async () => {
+  const { assertRemoteShellAllowed } = await import('../lib/shell-ban.js')
+  assert.throws(() => assertRemoteShellAllowed('ssh host cmd /c dir', 'pwsh'), /远程主机/)
+})
+
 console.log(`\n${passed} 项通过`)

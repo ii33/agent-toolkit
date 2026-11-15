@@ -12,7 +12,7 @@
  */
 import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture, execStreaming } from '../lib/exec.js'
 import { startAsJob } from '../lib/job-adopt.js'
-import { assertRemoteShellAllowed } from '../lib/shell-ban.js'
+import { assertRemoteShellAllowed, localShellBanReason } from '../lib/shell-ban.js'
 import { requireString } from '../lib/fs-common.js'
 import { resolveCallCwd } from './cwd-arg.js'
 import { createToolRegistrar } from './registry.js'
@@ -110,6 +110,9 @@ function runDefinition(ctx) {
       const cwd = resolveCallCwd(ctx, exec, args?.cwd)
       const timeoutMs = args?.timeout_ms === undefined ? DEFAULT_TIMEOUT_MS : Number(args.timeout_ms)
       // 远程主机同样禁 powershell 5.1 / cmd：拦 ssh/plink 这类远程执行器调用被禁 shell
+      // program 是命令位置 → 本地查；argv 是数据，只参与远程检查（避免参数里的 ; cmd 误报）
+      const localReason = localShellBanReason(program)
+      if (localReason !== undefined) throw new Error(`run: ${localReason}`)
       assertRemoteShellAllowed([program, ...argv], 'run')
 
       if (REQUIRE_APPROVAL && !PREFERRED.includes(program.toLowerCase().replace(/\.exe$/u, ''))) {

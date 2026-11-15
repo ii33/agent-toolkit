@@ -12,7 +12,7 @@
  */
 import { DEFAULT_TIMEOUT_MS, MAX_TIMEOUT_MS, execCapture, execStreaming } from '../lib/exec.js'
 import { startAsJob } from '../lib/job-adopt.js'
-import { assertRemoteShellAllowed } from '../lib/shell-ban.js'
+import { assertShellAllowed } from '../lib/shell-ban.js'
 import { requireString } from '../lib/fs-common.js'
 import { resolveCallCwd } from './cwd-arg.js'
 import { createToolRegistrar } from './registry.js'
@@ -114,7 +114,8 @@ function shDefinition(ctx) {
     async execute(args, exec) {
       const command = requireString(args?.command, 'command')
       // 远程主机同样禁 powershell 5.1 / cmd：拦 ssh/plink 这类远程执行器调用被禁 shell
-      assertRemoteShellAllowed(command, 'sh')
+      // command 是真正的命令行 → 本地命令位置检查适用（引号内的数据已被剔除）
+      assertShellAllowed(command, 'sh')
       const cwd = resolveCallCwd(ctx, exec, args?.cwd)
       const timeoutMs = args?.timeout_ms === undefined ? DEFAULT_TIMEOUT_MS : Number(args.timeout_ms)
       const bash = await resolveBash(ctx, exec)
