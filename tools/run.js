@@ -151,7 +151,8 @@ function runDefinition(ctx) {
             output: label
           }
         }
-        // 没有 jobs 服务就退回同步执行，功能不缺失
+        // 退回同步执行时留痕：否则模型以为在后台跑，实际被阻塞（实测踩过）
+        ctx.logger?.warn('agentkit: run_in_background 不可用（宿主未挂 @deepseek-ai/dsh-tool-jobs 或后台作业未就绪），本次退回同步执行')
       }
 
       const result = await execCapture(ctx, exec, { argv: [executable, ...argv], cwd, timeoutMs })

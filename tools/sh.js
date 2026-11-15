@@ -135,7 +135,9 @@ function shDefinition(ctx) {
             output: command
           }
         }
-        // 没有 jobs 服务就退回同步执行，不能让用户的功能凭空消失
+        // 退回同步执行时**必须留痕**：否则模型以为自己在后台跑，
+        // 实际被阻塞到超时，且没有任何线索（实测踩过）。
+        ctx.logger?.warn('agentkit: run_in_background 不可用（宿主未挂 @deepseek-ai/dsh-tool-jobs 或后台作业未就绪），本次退回同步执行')
       }
       const result = await execCapture(ctx, exec, { argv: [bash, '-c', command], cwd, timeoutMs })
       return {

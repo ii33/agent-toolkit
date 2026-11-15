@@ -49,14 +49,20 @@ check('有 start 但没有 servesOwner → 乐观放行', () => {
   assert.equal(jobControllerAvailable({ get: () => svc }, svc), true)
 })
 
-check('servesOwner 明确返回 false → 不可用', () => {
-  const svc = { start() {}, servesOwner: () => false }
-  assert.equal(jobControllerAvailable({ get: () => svc }, svc), false)
+check('servesOwner 对假 owner 返回 false 时**不**判定不可用', () => {
+  // 关键回归：真实实现里 servesOwner 走 chainLayers(scopeOf(owner.ctx))，
+  // 假 owner 没有 ctx → 恒为 false。若据此判定不可用，
+  // run_in_background 会静默退回同步执行（实测阻塞 71 秒）。
+  const svc = { start() { return 'job-1' }, servesOwner: (owner) => owner?.ctx !== undefined }
+  const ctx = { logger, get: () => svc }
+  assert.equal(svc.servesOwner({ id: 'probe' }), false, '前提：假 owner 确实拿不到 scope')
+  assert.equal(jobControllerAvailable(ctx, svc), true, '不能因为假 owner 探测失败就降级')
 })
 
-check('servesOwner 抛错 → 乐观放行（由调用处兜底）', () => {
-  const svc = { start() {}, servesOwner: () => { throw new Error('boom') } }
-  assert.equal(jobControllerAvailable({ get: () => svc }, svc), true)
+check('servesOwner 实现异常也不影响判定（我们根本不调它）', () => {
+  const svc = { start() { return 'job-1' }, servesOwner: () => { throw new Error('boom') } }
+  assert.equal(jobControllerAvailable({ get: () => svc }, svc), true,
+    '可用性只看是否有 start()，servesOwner 的内部行为不参与判定')
 })
 
 console.log('\nadoptAsJob')
@@ -104,12 +110,17 @@ check('取消导致退出 → 作业状态 killed', async () => {
   assert.deepEqual(await state.done, { status: 'killed' })
 })
 
-check('没有 controller 时返回 undefined（安静降级）', () => {
-  const svc = { start() {}, servesOwner: () => false }
-  const job = adoptAsJob({ get: () => svc, logger }, exec, {
+check('start() 抛 JOB_CONTROLLER_UNAVAILABLE 时降级为 undefined', () => {
+  // 真正的降级判据是 start() 抛错，而不是用假 owner 预探测。
+  const svc = {
+    start() { throw new Error('background jobs unavailable: no job controller serves this agent') }
+  }
+  const warnings = []
+  const job = adoptAsJob({ get: () => svc, logger: { warn: (m) => warnings.push(m), info() {} } }, exec, {
     label: 'x', cancelProcess: () => {}, done: Promise.resolve({ exitCode: 0 })
   })
-  assert.equal(job, undefined)
+  assert.equal(job, undefined, '抛错时必须降级，不能把异常抛给调用方')
+  assert.ok(warnings.some((m) => m.includes('转后台作业失败')), '降级要留日志')
 })
 
 console.log('\nstartAsJob')
