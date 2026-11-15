@@ -201,4 +201,40 @@ check('后台模式下退出码不是必填（进程还在跑）', async () => {
   assert.ok(sh.output.schema.properties.job_id !== undefined, '要能返回 job_id')
 })
 
+console.log('\nexecCapture：超时转后台')
+
+check('超时后转后台并**立刻返回**（不再等进程跑完）', async () => {
+  const { execCapture } = await import('../lib/exec.js')
+  const specs = []
+  const jobsService = {
+    start(spec) { specs.push(spec); spec.run({ append() {}, updateProgress() {} }); return 'job-1' },
+    attachController() {},
+    servesOwner: () => true
+  }
+  // 假进程：输出一段就再也不结束
+  const neverEnding = {
+    stdout: { async *[Symbol.asyncIterator]() { yield Buffer.from('partial\n'); await new Promise(() => {}) } },
+    stderr: { async *[Symbol.asyncIterator]() {} },
+    done: new Promise(() => {})
+  }
+  const ctx = {
+    logger,
+    get: (name) => (name === 'subprocess' ? { spawn: () => neverEnding } : name === 'jobs' ? jobsService : undefined)
+  }
+  const started = Date.now()
+  const value = await execCapture(ctx, { agent: { id: 'x' } }, {
+    argv: ['C:\\long\\path\\node.exe', '-e', 'x'],
+    cwd: '.',
+    timeoutMs: 200
+  })
+  const elapsed = Date.now() - started
+
+  assert.equal(value.backgroundJobId, 'job-1', '应带回作业 id')
+  assert.equal(value.timedOut, true)
+  assert.ok(elapsed < 2000, `必须在超时后立刻返回，实际 ${elapsed}ms（超过 2s 说明还在等进程）`)
+  assert.match(value.output, /已在后台继续运行/)
+  // label 去掉目录前缀，只留文件名（否则作业列表会被长路径挤爆）
+  assert.equal(specs[0].label, 'node.exe -e x')
+})
+
 console.log(`\n${passed} 项通过`)
