@@ -106,14 +106,37 @@ check('cancel 会调用 cancelProcess（真正终止进程）', async () => {
   assert.equal(killed, true, 'cancel 必须终止进程，不能只记一笔')
 })
 
-check('子进程正常退出 → 作业状态 succeeded', async () => {
+check('子进程正常退出 → 作业状态 completed', async () => {
   const { service, state } = fakeJobs()
   adoptAsJob({ get: () => service, logger }, exec, {
     label: 'ok',
     cancelProcess: () => {},
     done: Promise.resolve({ exitCode: 0 })
   })
-  assert.deepEqual(await state.done, { status: 'succeeded' })
+  assert.deepEqual(await state.done, { status: 'completed' })
+})
+
+console.log('\n终态必须落在 DSH 的枚举内')
+
+check('所有终态都属于 running/stopping/completed/killed/failed', async () => {
+  // 报错过：tool "job_list" returned invalid output:
+  //   "value[0].status" must be one of ["running","stopping","completed","killed","failed"]
+  // 原因是我写了 'succeeded' —— 合法终态只有 completed / killed / failed。
+  const ALLOWED = ['running', 'stopping', 'completed', 'killed', 'failed']
+
+  const cases = [
+    ['正常退出', Promise.resolve({ exitCode: 0 })],
+    ['失败退出', Promise.resolve({ exitCode: 3 })],
+    ['被取消', Promise.resolve({ exitCode: 1, cancelled: true })],
+    ['启动异常', Promise.reject(new Error('spawn failed'))]
+  ]
+
+  for (const [label, done] of cases) {
+    const { service, state } = fakeJobs()
+    adoptAsJob({ get: () => service, logger }, exec, { label, cancelProcess: () => {}, done })
+    const { status } = await state.done
+    assert.ok(ALLOWED.includes(status), `${label} 的终态 "${status}" 不在允许枚举内`)
+  }
 })
 
 check('取消导致退出 → 作业状态 killed', async () => {

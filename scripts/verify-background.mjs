@@ -101,11 +101,16 @@ for (const { cap, args } of CASES) {
     continue
   }
 
-  // 校验作业真的在后台跑
+  // 校验作业真的在后台跑，且状态落在 DSH 的枚举内
+  // （报错过：job_list invalid output "value[0].status" must be one of
+  //   ["running","stopping","completed","killed","failed"] —— 因为写成了 succeeded）
   await new Promise((ok) => setTimeout(ok, 1200))
   const mine = jobs.list(SESSION_ID).find((j) => j.id === value.job_id)
+  const ALLOWED = ['running', 'stopping', 'completed', 'killed', 'failed']
+  const validEnum = ALLOWED.includes(mine?.status)
   console.log(`  状态（1.2s 后）: ${mine?.status ?? '(查不到)'}  ${mine?.status === 'running' ? '✅ 在后台运行' : '⚠️'}`)
   if (mine?.status !== 'running') failures += 1
+  if (!validEnum) { console.log(`  ❌ 状态不在允许枚举内`); failures += 1 }
 
   // 终止并确认
   try { await jobs.kill(value.job_id, SESSION_ID, 'verify cleanup') } catch {}
