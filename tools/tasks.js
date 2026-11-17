@@ -405,10 +405,18 @@ export function apply(ctx) {
   register(stageSetDefinition(ctx))
 
   // order 200 排在 sandbox(110)/approval(115)/delegation(120) 之后：位置最新鲜，最不容易被忽略。
+  // text 在每次请求组装时执行（request/header 前后）；**绝不能抛出**，
+  // 否则会把整轮请求乃至宿主进程带下去。取不到就返回空串，等价于不注入。
   ctx.systemPrompt.context({
     name: 'doc-pipeline:panel',
     order: 200,
-    text: ({ scope }) => agents.get(scope)?.panel ?? ''
+    text: ({ scope }) => {
+      try {
+        return agents.get(scope)?.panel ?? ''
+      } catch {
+        return ''
+      }
+    }
   })
 
   // 会话建立时把工作区里已有的账本读进来；失败不影响会话创建。

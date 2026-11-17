@@ -205,4 +205,32 @@ check('空能力列表仍返回空串（不注册上下文）', () => {
   assert.equal(renderCapabilities(undefined), '')
 })
 
+
+console.log('提示词渲染绝不能把宿主带崩')
+
+check('apply 期渲染失败 → 跳过注入，不抛出', () => {
+  // 这段在 apply() 里跑，抛出去会打断整个预设挂载。
+  const bad = new Proxy(['fs'], { get(t, p) { if (p === 'length') throw new Error('boom'); return t[p] } })
+  const warnings = []
+  const ctx = {
+    systemPrompt: { context: () => { throw new Error('不该走到这里') } },
+    logger: { warn: (m) => warnings.push(m) }
+  }
+  assert.equal(applyCapabilitiesContext(ctx, bad, undefined), false)
+  assert.ok(warnings.some((m) => m.includes('首次渲染失败')), '要留下日志')
+})
+
+check('text() 运行期失败 → 返回空串，不抛出', () => {
+  // 这是每次请求组装时执行的函数（request/header 前后）。
+  // 它一抛就可能把整轮请求乃至宿主进程带下去。
+  const registered = []
+  const ctx = { systemPrompt: { context: (e) => registered.push(e) }, logger: { warn() {} } }
+  let armed = false
+  const cap = new Proxy(['fs'], { get(t, p) { if (p === 'length' && armed) throw new Error('runtime boom'); return t[p] } })
+  applyCapabilitiesContext(ctx, cap, undefined)
+  armed = true
+  assert.equal(registered.length, 1)
+  assert.equal(registered[0].text({ scope: {} }), '', '失败时必须返回空串而不是抛出')
+})
+
 console.log(`\n${passed} 项通过`)
